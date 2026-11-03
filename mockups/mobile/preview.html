@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>yapping · phone preview</title>
+<!-- Renders the app in an iframe at a real phone viewport (default 390×844) so
+     media queries see a phone. Query string is passed through to the app:
+     preview.html?w=390&h=844&offline=1&demo=schedule -->
+<style>html,body{margin:0;background:#000}iframe{border:0;display:block}</style>
+<iframe id="f"></iframe>
+<script>
+  const p = new URLSearchParams(location.search)
+  const w = p.get('w') || 390, h = p.get('h') || 844
+  p.delete('w'); p.delete('h')
+  const f = document.getElementById('f')
+  f.style.width = w + 'px'; f.style.height = h + 'px'
+  f.src = './?' + p.toString()
+</script>

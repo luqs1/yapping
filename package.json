@@ -1,0 +1,6 @@
+{
+  "name": "yapping",
+  "private": true,
+  "type": "module",
+  "scripts": { "relay": "bun --watch relay/server.ts" }
+}

@@ -1,0 +1,216 @@
+<title>yapping</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+  /* Layout: one centred column. Hero with the four chibis, the four rules,
+     then each harness as a spread (screenshot + notes), plugins, the words to try. */
+  :root {
+    --paper: #ffffff;
+    --ink: #17161a;
+    --muted: #6c6873;
+    --line: #e9e6ee;
+    --wash: #f6f5f8;
+    --accent: #d97757;
+    --display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+    --body: 'Figtree', ui-sans-serif, system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --paper: #131215; --ink: #f1eff4; --muted: #a29fa8; --line: #2b2930; --wash: #1b1a1f; color-scheme: dark }
+  }
+  :root[data-theme="dark"] { --paper: #131215; --ink: #f1eff4; --muted: #a29fa8; --line: #2b2930; --wash: #1b1a1f; color-scheme: dark }
+  * { box-sizing: border-box }
+  body { background: var(--paper); color: var(--ink); font: 16px/1.55 var(--body); margin: 0 }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 56px 80px }
+  .label { font: 500 12px/1 var(--body); letter-spacing: .22em; text-transform: uppercase; color: var(--muted) }
+  h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: -.02em; text-wrap: balance; margin: 0 }
+  h1 { font-size: clamp(56px, 10vw, 112px); line-height: .9 }
+  h2 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.05 }
+  h3 { font-size: 26px; line-height: 1.1 }
+  p { margin: 0 }
+  a { color: inherit }
+  code { font: 14px var(--mono) }
+
+  .hero { display: grid; gap: 22px; padding-bottom: 48px }
+  .chibis { display: flex; gap: 6px; align-items: flex-end; min-height: 62px }
+  .chibis svg { width: 56px; height: auto; display: block }
+  .lede { font-size: 20px; color: var(--muted); max-width: 46ch }
+  .lede b { color: var(--ink); font-weight: 600 }
+
+  .rules { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; padding-block: 32px 48px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line) }
+  .rules div { display: grid; gap: 6px; min-width: 0 }
+  .rules strong { font: 600 17px/1.3 var(--body) }
+  .rules p { color: var(--muted); font-size: 15px }
+
+  .section-head { display: grid; gap: 10px; padding-block: 56px 20px }
+  .section-head p { color: var(--muted); max-width: 62ch }
+
+  .spread { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 36px; align-items: center; padding-block: 28px }
+  .spread:nth-of-type(even) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.75fr) }
+  .spread:nth-of-type(even) .shot { order: 2 }
+  .shot { display: block; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--wash); box-shadow: 0 20px 44px -26px rgba(23, 22, 26, .4); transition: transform .25s ease }
+  .shot:hover { transform: translateY(-3px) }
+  .shot img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; object-position: top }
+  .notes { display: grid; gap: 12px; min-width: 0 }
+  .notes .lang { color: var(--muted) }
+  .notes ul { margin: 0; padding-left: 18px; color: var(--muted) }
+  .notes li + li { margin-top: 4px }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px }
+  .btn { display: inline-flex; align-items: center; padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none; font: 500 14px/1 var(--body); background: var(--paper) }
+  .btn.ink { background: var(--ink); color: var(--paper); border-color: var(--ink) }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+  .plugins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px }
+  .plugin { border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: grid; gap: 10px; align-content: start; min-width: 0 }
+  .plugin .mark svg { width: 44px; height: auto; display: block }
+  .plugin p { color: var(--muted); font-size: 15px }
+  pre { margin: 0; overflow-x: auto; background: var(--wash); border-radius: 10px; padding: 12px 14px; font: 13px/1.5 var(--mono) }
+
+  .try { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 32px; padding-top: 8px }
+  .try dt { font: 600 18px/1.3 var(--body) }
+  .try dd { margin: 2px 0 0; color: var(--muted) }
+  footer { padding-top: 56px; color: var(--muted); font-size: 14px }
+
+  @media (max-width: 860px) {
+    .rules { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+    .spread, .spread:nth-of-type(even), .try { grid-template-columns: minmax(0, 1fr) }
+    .spread:nth-of-type(even) .shot { order: 0 }
+    .plugins { grid-template-columns: minmax(0, 1fr) }
+  }
+  @media (max-width: 480px) { .rules { grid-template-columns: minmax(0, 1fr) } }
+  @media (prefers-reduced-motion: reduce) { .shot { transition: none } .shot:hover { transform: none } }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="chibis" id="chibis" aria-label="The four chibi agents: Claude, opencode, pi and Codex"></div>
+    <h1>yapping</h1>
+    <p class="lede">A messenger in your agent's sidebar. <b>People text people.</b> Your agent quietly helps with the messages, in the chats you let it see, and sends nothing without you.</p>
+  </header>
+
+  <section class="rules" aria-label="How it works">
+    <div><strong>People text people</strong><p>A plain chat you already know. No suggested replies, no AI-written messages.</p></div>
+    <div><strong>Your agent is a small mark</strong><p>A tiny version of your harness's logo sits under the message it's handling. Tap it to see what it's doing.</p></div>
+    <div><strong>Nothing goes without you</strong><p>When it has something ready, it asks: Send or Not now. What you approve goes out as your message.</p></div>
+    <div><strong>Every chat, one list</strong><p>WhatsApp, iMessage and Slack sit alongside, with one honest line about what you'd gain by moving.</p></div>
+  </section>
+
+  <div class="section-head">
+    <p class="label">Four homes</p>
+    <h2>Same chats, in each harness's own clothes</h2>
+    <p>Each mockup is the real harness with yapping as its sidebar. They share one world: in Finn's chat, send "hey can you take a look at my demo?" and watch your agent and Finn's sort it out.</p>
+  </div>
+
+  <section class="spread">
+    <a class="shot" href="claude-desktop/?demo=demo"><img src="shots/claude-desktop.jpg" alt="Claude Code desktop with the Chats pane open and Claude's chibi offering to send Finn the demo link" loading="lazy"></a>
+    <div class="notes">
+      <p class="label">Claude Code · desktop</p>
+      <h3>Native to Claude</h3>
+      <p class="lang">A Chats pane that looks like Anthropic built it.</p>
+      <ul>
+        <li>Proposals also appear in the band above the prompt, like a permission ask</li>
+        <li>Unread and "waiting for you" counts in the status line</li>
+        <li>A per-chat "Claude can see this chat" switch</li>
+      </ul>
+      <div class="row"><a class="btn ink" href="claude-desktop/?demo=demo">Play the demo flow</a><a class="btn" href="claude-desktop/?demo=theo">Theo's docs</a></div>
+    </div>
+  </section>
+
+  <section class="spread">
+    <a class="shot" href="opencode/?demo=demo"><img src="shots/opencode.jpg" alt="opencode desktop with a PostHog-styled chat side panel" loading="lazy"></a>
+    <div class="notes">
+      <p class="label">opencode</p>
+      <h3>PostHog's art style</h3>
+      <p class="lang">Beige, bold outlines, chunky buttons. Just the chat.</p>
+      <ul>
+        <li>A side-panel tab next to Review and Context</li>
+        <li>The opencode mark under messages, two when agents talk</li>
+        <li>Titlebar count and a quiet toast for proposals</li>
+      </ul>
+      <div class="row"><a class="btn ink" href="opencode/?demo=schedule">Schedule a call</a><a class="btn" href="opencode/?demo=demo&amp;observe=1">See what it's doing</a></div>
+    </div>
+  </section>
+
+  <section class="spread">
+    <a class="shot" href="pi/?demo=demo"><img src="shots/pi.jpg" alt="pi in a terminal with a Discord-styled chat view and the pi chibi under a message" loading="lazy"></a>
+    <div class="notes">
+      <p class="label">pi</p>
+      <h3>Discord, in a terminal</h3>
+      <p class="lang">Servers, DMs and presence, drawn in character cells.</p>
+      <ul>
+        <li>A five-cell pi chibi; y to send, n for not now, o to watch</li>
+        <li>"Playing opencode" presence for people</li>
+        <li>pi keeps working underneath; its footer shows what's waiting</li>
+      </ul>
+      <div class="row"><a class="btn ink" href="pi/?demo=demo">Play the demo flow</a><a class="btn" href="pi/?chat=br-mum">A bridged chat</a></div>
+    </div>
+  </section>
+
+  <section class="spread">
+    <a class="shot" href="mobile/?demo=demo"><img src="shots/mobile.jpg" alt="The yapping phone app, styled like WhatsApp, with two chibis under a message" loading="lazy"></a>
+    <div class="notes">
+      <p class="label">Phone · installable web app</p>
+      <h3>WhatsApp</h3>
+      <p class="lang">The messenger you already know, with a small mark that helps.</p>
+      <ul>
+        <li>The Dynamic Island shows the chibis while they work</li>
+        <li>Tap a chibi for a sheet of what Claude is doing</li>
+        <li>Add to Home Screen and it runs full-screen</li>
+      </ul>
+      <div class="row"><a class="btn ink" href="mobile/?demo=schedule">Schedule a call</a><a class="btn" href="mobile/?chat=br-mum&amp;screen=info">Contact info</a></div>
+    </div>
+  </section>
+
+  <div class="section-head">
+    <p class="label">Not just pictures</p>
+    <h2>It runs in the real harnesses</h2>
+    <p>Each plugin talks to the same relay and draws in the harness's own UI. The agent gets tools to read the inbox and a chat, send your exact words, and approve what's ready once you say yes.</p>
+  </div>
+  <div class="plugins">
+    <div class="plugin">
+      <span class="mark" data-chibi="claude"></span>
+      <p class="label">Claude Code mod</p>
+      <h3>Pane, band, status, /yap</h3>
+      <p>Follows Claude's own theme, desktop and terminal.</p>
+      <pre>claude --plugin-dir plugins/claude</pre>
+    </div>
+    <div class="plugin">
+      <span class="mark" data-chibi="opencode"></span>
+      <p class="label">opencode plugin</p>
+      <h3>/yap page and side panel</h3>
+      <p>PostHog palette inside opencode v2's TUI.</p>
+      <pre>cd plugins/opencode/demo
+opencode --standalone</pre>
+    </div>
+    <div class="plugin">
+      <span class="mark" data-chibi="pi"></span>
+      <p class="label">pi extension</p>
+      <h3>ctrl+q opens it</h3>
+      <p>Discord-style overlay, a widget above the editor.</p>
+      <pre>pi -e plugins/pi</pre>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <p class="label">Try it</p>
+    <h2>Things to say in Finn's chat</h2>
+  </div>
+  <dl class="try">
+    <div><dt>"hey can you take a look at my demo?"</dt><dd>Your agent waits for Finn's yes, checks with his, then offers to send the link and a test login.</dd></div>
+    <div><dt>"can we grab 30 min thursday?"</dt><dd>The two agents find a slot; you get one Send for the invite.</dd></div>
+    <div><dt>Open Theo's Slack chat</dt><dd>He asked for the API docs. Your agent already found them and is waiting for your OK.</dd></div>
+    <div><dt>Open Mum's chat</dt><dd>Your agent can't see it. Family stays off unless you switch it on.</dd></div>
+  </dl>
+
+  <footer>
+    <p>Run <code>bun relay/server.ts</code> and open any mockup twice, once with <code>?user=finn</code>, to chat between two windows. Without it, each page runs the whole world on its own.</p>
+  </footer>
+</div>
+
+<script type="module">
+  import { chibi } from '../shared/chibi.js'
+  const states = ['reading', 'talking', 'ready', 'done']
+  document.getElementById('chibis').innerHTML = ['claude', 'opencode', 'pi', 'codex'].map((h, i) => chibi(h, { state: states[i], size: 56 })).join('')
+  for (const el of document.querySelectorAll('[data-chibi]')) el.innerHTML = chibi(el.dataset.chibi, { state: 'idle', size: 44 })
+</script>

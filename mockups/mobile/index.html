@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>yapping</title>
+<meta name="description" content="A messenger where your agent quietly helps under the message. Nothing is sent without you.">
+<meta name="theme-color" content="#ffffff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="yapping">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page" id="page">
+  <aside class="caption">
+    <div class="wordmark"><img src="icons/icon.svg" alt="" width="34" height="34"><span>yapping</span><em>for your pocket</em></div>
+    <h1>Text your people.<br><i>Your agent</i><br>handles the rest.</h1>
+    <p class="lede">The yapping app for iPhone and Android. It's the messenger you already know: people, bubbles, ticks. When your Claude can help with a message, a tiny version of it sits just under that message. Tap it to watch what it's doing. Nothing is sent without you.</p>
+    <ul class="bullets">
+      <li><b>✳︎</b><span><strong>A chibi, not a chatbot.</strong> Your agent never posts. It reads, talks to Finn's agent, then asks: <em>Send</em> or <em>Not now</em>.</span></li>
+      <li><b>🔒</b><span><strong>Off for family.</strong> Every chat has its own “Claude can see this chat” switch.</span></li>
+      <li><b>⇄</b><span><strong>Bridges, quietly.</strong> WhatsApp, iMessage and Slack sit in the same list, with one honest line about what you're missing.</span></li>
+    </ul>
+    <div class="qrcard">
+      <div class="qrbox" id="qr"></div>
+      <div>
+        <div class="qr-title">Open on your phone</div>
+        <div class="qr-sub">Scan, then <b>Share → Add to Home Screen</b>. It's a real PWA — full-screen, offline-tolerant, no App Store.</div>
+        <code id="qr-url">localhost:7788/mockups/mobile</code>
+      </div>
+    </div>
+    <div class="tries"><span>Try</span>
+      <a href="?offline=1&demo=demo">🔗 demo</a>
+      <a href="?offline=1&demo=schedule">📅 schedule</a>
+      <a href="?offline=1&demo=theo">📄 theo</a>
+      <a href="?offline=1&demo=bridge">⇄ bridge</a>
+      <a href="?offline=1&demo=demo&observe=1">👀 observe</a>
+    </div>
+  </aside>
+
+  <div class="device-wrap" id="deviceWrap">
+    <div class="device" id="device">
+      <div class="btn b-action"></div><div class="btn b-vup"></div><div class="btn b-vdn"></div><div class="btn b-power"></div>
+      <div class="screen" id="screen">
+        <div class="statusbar" id="statusbar"><span class="sb-time" id="sbTime">9:41</span><span class="sb-right" id="sbRight"></span></div>
+        <div class="island" id="island"></div>
+        <div class="views" id="views"></div>
+        <div class="banner" id="banner"></div>
+        <div class="overlay" id="overlay"></div>
+        <div class="confetti" id="confetti"></div>
+        <div class="homebar"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<noscript>yapping needs JavaScript.</noscript>
+<script type="module" src="app.js"></script>
+</body>
+</html>

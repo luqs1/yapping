@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>yapping · pi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="yap-open">
+<div class="win">
+  <div class="titlebar">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <span class="folder">▆</span><span>π - yapping</span>
+    <span class="tb-right" id="tb-right">ghostty — 184×47</span>
+  </div>
+  <div class="term" id="term">
+    <!-- pi session, slim, still running underneath -->
+    <div class="pistrip" id="pistrip"></div>
+    <!-- the extension: ctx.ui.custom(new YappingComponent()) -->
+    <div class="yap" id="yap">
+      <div class="ytitle" id="ytitle"></div>
+      <div class="app" id="app">
+        <nav class="rail" id="rail"></nav>
+        <aside class="side" id="side"></aside>
+        <main class="chat" id="chat">
+          <div class="chat-h" id="chat-h"></div>
+          <div id="notice"></div>
+          <div class="msgs" id="msgs"></div>
+          <div class="composer-wrap" id="composer-wrap">
+            <div id="replybar"></div>
+            <div id="slash"></div>
+            <div class="composer" id="composer">
+              <button class="plus" data-act="plus" title="Upload">⊕</button>
+              <input id="input" autocomplete="off" spellcheck="false" placeholder="Message">
+              <div class="ctools">
+                <button data-act="slash" title="Commands">/</button>
+                <button data-act="emoji" title="Emoji">☺</button>
+              </div>
+            </div>
+            <div class="typing-line" id="typing"></div>
+          </div>
+          <div class="toasts" id="toasts"></div>
+        </main>
+        <aside class="right" id="right"></aside>
+      </div>
+      <div id="overlay"></div>
+    </div>
+    <!-- pi with the extension hidden -->
+    <div class="pifull" id="pifull"></div>
+    <div class="extline" id="extline"></div>
+    <div class="pifoot" id="pifoot"></div>
+  </div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

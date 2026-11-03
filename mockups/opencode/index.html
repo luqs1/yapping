@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>yapping · opencode</title>
+<meta name="description" content="yapping installed as an opencode plugin, wearing PostHog's clothes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div class="oc-app" id="oc">
+  <!-- ═════ opencode titlebar (packages/app/src/components/titlebar.tsx, v2 tab strip) ═════ -->
+  <header class="oc-titlebar" data-slot="titlebar-v2">
+    <div class="oc-traffic"><i></i><i></i><i></i></div>
+    <button class="oc-ib" title="Toggle sidebar" id="oc-sidebar-toggle"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="2.5"/><path d="M8 4v12"/></svg></button>
+    <button class="oc-ib" title="Back"><svg viewBox="0 0 20 20"><path d="M12 5l-5 5 5 5"/></svg></button>
+    <button class="oc-ib dim" title="Forward"><svg viewBox="0 0 20 20"><path d="M8 5l5 5-5 5"/></svg></button>
+    <nav class="oc-tabs" data-slot="titlebar-tabs">
+      <a class="oc-tab active"><span class="oc-spin"></span><span class="t">Add yapping side-panel plugin</span><span class="x">×</span></a>
+      <a class="oc-tab"><span class="oc-dot blue"></span><span class="t">Relay reconnect backoff</span><span class="x">×</span></a>
+      <a class="oc-tab"><span class="t">Draw the cats in SVG</span><span class="x">×</span></a>
+      <button class="oc-ib" title="New tab"><svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button>
+    </nav>
+    <div class="oc-tb-right" id="opencode-titlebar-right">
+      <!-- yapping portals its status pill into opencode's titlebar-right slot -->
+      <button class="yap-pill" id="yap-pill" title="yapping"></button>
+      <span class="oc-dev">DEV</span>
+      <button class="oc-btn ghost"><svg viewBox="0 0 20 20"><path d="M10 3v9M6 7l4-4 4 4M4 12v4h12v-4"/></svg>Share</button>
+      <button class="oc-ib on" title="Toggle side panel" id="oc-panel-toggle"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="2.5"/><path d="M12 4v12"/></svg></button>
+    </div>
+  </header>
+
+  <div class="oc-body" id="oc-body">
+    <!-- ═════ sidebar rail (pages/layout/sidebar-shell.tsx) ═════ -->
+    <aside class="oc-rail" data-component="sidebar-rail">
+      <div class="oc-rail-top">
+        <button class="oc-proj active" style="--p:#F54E00" title="yapping">Y</button>
+        <button class="oc-proj" style="--p:#7C8CF8" title="agentbus">A<span class="oc-proj-badge"><span class="oc-spin sm"></span></span></button>
+        <button class="oc-proj" style="--p:#12c905" title="equi">E</button>
+        <button class="oc-proj" style="--p:#A753AE" title="barbican-3d">B</button>
+        <button class="oc-ib lg" title="Open project"><svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button>
+      </div>
+      <div class="oc-rail-bottom">
+        <button class="oc-ib lg" title="Settings"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6"/></svg></button>
+        <button class="oc-ib lg" title="Help"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><path d="M8 8a2 2 0 1 1 2.8 1.8c-.5.3-.8.7-.8 1.2v.5M10 13.8v.2"/></svg></button>
+      </div>
+    </aside>
+
+    <!-- ═════ sidebar panel: project + sessions (pages/layout/sidebar-project.tsx, sidebar-items.tsx) ═════ -->
+    <aside class="oc-sidebar" id="oc-sidebar">
+      <div class="oc-sb-head">
+        <div>
+          <div class="oc-sb-title">yapping</div>
+          <div class="oc-sb-path">~/repos/yapping</div>
+        </div>
+        <button class="oc-ib" title="Project menu"><svg viewBox="0 0 20 20"><circle cx="5" cy="10" r=".8"/><circle cx="10" cy="10" r=".8"/><circle cx="15" cy="10" r=".8"/></svg></button>
+      </div>
+      <button class="oc-sb-new"><svg viewBox="0 0 20 20"><path d="M4 16h3l8.5-8.5-3-3L4 13z"/></svg>New session<kbd>⌘⇧S</kbd></button>
+      <div class="oc-sb-group">
+        <div class="oc-sb-label">main <span>local</span></div>
+        <a class="oc-sess active"><span class="ic"><span class="oc-spin"></span></span><span class="t">Add yapping side-panel plugin</span></a>
+        <a class="oc-sess"><span class="ic"><span class="oc-dot blue"></span></span><span class="t">Relay reconnect backoff</span></a>
+        <a class="oc-sess"><span class="ic"></span><span class="t">Draw the cats in SVG</span></a>
+        <a class="oc-sess"><span class="ic"><span class="oc-dot amber"></span></span><span class="t">Bridge nudge copy pass</span></a>
+        <a class="oc-sess"><span class="ic"></span><span class="t">Fix typing indicator race</span></a>
+        <a class="oc-sess"><span class="ic"></span><span class="t">Litter box: read-only mode</span></a>
+      </div>
+      <div class="oc-sb-group">
+        <div class="oc-sb-label">posthog-skin <span>worktree</span></div>
+        <a class="oc-sess"><span class="ic"></span><span class="t">3D buttons that press down</span></a>
+        <a class="oc-sess"><span class="ic"><span class="oc-dot red"></span></span><span class="t">Heatmap colour scale</span></a>
+      </div>
+      <div class="oc-sb-foot">
+        <div class="oc-sb-foot-row"><span class="oc-dot green"></span>localhost:4096 <span class="dim">· v1.15.4</span></div>
+      </div>
+    </aside>
+
+    <!-- ═════ main: session (pages/session.tsx) + side panel (session-side-panel.tsx) ═════ -->
+    <main class="oc-main">
+      <section class="oc-session">
+        <div class="oc-sess-head">
+          <div class="oc-sess-title">Add yapping side-panel plugin</div>
+          <div class="oc-sess-meta"><span class="oc-ctx"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5"/><path d="M10 3.5a6.5 6.5 0 0 1 6.2 4.6" class="hot"/></svg>38%</span><span>$0.00</span></div>
+        </div>
+        <div class="oc-timeline" id="oc-timeline">
+          <div class="oc-user">Register yapping as a side-panel tab so my chats sit next to Review. Keep it a plugin — no core changes. The agent should only ever show up as a little opencode mark under a message.</div>
+
+          <div class="oc-turn">
+            <div class="oc-part tool collapsed"><svg class="chev" viewBox="0 0 20 20"><path d="M8 6l4 4-4 4"/></svg><span class="tt">Explored</span><span class="ts">6 reads, 2 searches</span></div>
+            <p class="oc-text">The desktop side panel is a <code>Tabs</code> strip in <code>session-side-panel.tsx</code> (Review · Context · open files). The TUI exposes the same idea as the <code>sidebar_content</code> slot — that's where the built-in Todo, MCP and LSP feature-plugins render. I'll register yapping in both, keep all state inside the plugin, and only render the agent where a chat has opted in.</p>
+            <div class="oc-part tool"><svg class="chev open" viewBox="0 0 20 20"><path d="M8 6l4 4-4 4"/></svg><span class="tt">Edit</span><span class="ts mono">plugin-yapping/src/panel.tsx</span><span class="diffstat"><b class="add">+84</b><b class="del">−2</b></span></div>
+            <pre class="oc-diff"><span class="ln">12</span><span class="a">+</span> <span class="k">export const</span> <span class="f">YappingPlugin</span>: <span class="ty">TuiPlugin</span> = <span class="k">async</span> (api) =&gt; {
+<span class="ln">13</span><span class="a">+</span>   <span class="k">const</span> yap = <span class="k">await</span> <span class="f">connect</span>({ user: <span class="s">"luqmaan"</span>, client: <span class="s">"opencode"</span> })
+<span class="ln">14</span><span class="a">+</span>   api.slots.<span class="f">register</span>({ order: <span class="c">250</span>, slots: { <span class="f">sidebar_content</span>: (_, p) =&gt; &lt;<span class="ty">Yapping</span> yap={yap} /&gt; } })
+<span class="ln">15</span><span class="a">+</span>   api.route.<span class="f">register</span>([{ name: <span class="s">"yapping"</span>, render: () =&gt; &lt;<span class="ty">YappingRoute</span> /&gt; }])
+<span class="ln">16</span><span class="d">−</span>   <span class="cm">// TODO: chat lives in another app, alt-tab every 5 min</span></pre>
+            <div class="oc-part tool"><svg class="chev" viewBox="0 0 20 20"><path d="M8 6l4 4-4 4"/></svg><span class="tt">Shell</span><span class="ts mono">bun test packages/plugin-yapping</span></div>
+            <pre class="oc-shell"><span class="ok">✓</span> slots › registers sidebar_content <span class="dim">[3ms]</span>
+<span class="ok">✓</span> assists › hidden when chat.sees is off <span class="dim">[1ms]</span>
+<span class="ok">✓</span> approve › posts attachment as the owner <span class="dim">[12ms]</span>
+ <b>12 pass</b>  <span class="dim">0 fail · 41 expect() calls · [184ms]</span></pre>
+            <div class="oc-part todos">
+              <div class="tt">To-dos <span class="ts">3/4</span></div>
+              <ul>
+                <li class="done">Register side-panel tab + <code>sidebar_content</code> slot</li>
+                <li class="done">Portal unread pill into <code>#opencode-titlebar-right</code></li>
+                <li class="done">Chibi under the message it is handling</li>
+                <li class="doing">Per-chat "opencode can see this chat" toggle</li>
+              </ul>
+            </div>
+            <p class="oc-text">yapping now lives in the side panel as its own tab, with the unread count in the titlebar. Open it with <kbd>⌘⇧Y</kbd>. Messages stay human; proposals only post after you hit <em>Send</em>.</p>
+            <div class="oc-part status"><span class="oc-spin"></span><span class="shimmer">Thinking</span></div>
+          </div>
+        </div>
+
+        <!-- composer (components/prompt-input.tsx: DockShellForm + DockTray) -->
+        <form class="oc-composer" id="oc-composer" onsubmit="return false">
+          <div class="oc-prompt">
+            <div class="oc-prompt-input" contenteditable="true" spellcheck="false" data-placeholder='Ask anything... "Add pagination to this list"'></div>
+            <button type="button" class="oc-ib attach" title="Add files"><svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button>
+            <button type="submit" class="oc-submit" title="Send"><svg viewBox="0 0 20 20"><path d="M10 15V5M5.5 9.5L10 5l4.5 4.5"/></svg></button>
+          </div>
+          <div class="oc-tray">
+            <button type="button" class="oc-sel" id="oc-agent" data-action="prompt-agent" title="Cycle agent (tab)"><span id="oc-agent-name">Build</span><svg viewBox="0 0 20 20"><path d="M6 8l4 4 4-4"/></svg></button>
+            <button type="button" class="oc-sel" id="oc-model" data-action="prompt-model"><svg class="prov" viewBox="0 0 16 20"><path d="M12 16H4V8H12V16Z" opacity=".4"/><path d="M12 4H4V16H12V4ZM16 20H0V0H16V20Z"/></svg><span id="oc-model-name">Big Pickle</span><svg viewBox="0 0 20 20"><path d="M6 8l4 4 4-4"/></svg></button>
+            <button type="button" class="oc-sel" data-action="prompt-model-variant"><span>Default</span><svg viewBox="0 0 20 20"><path d="M6 8l4 4 4-4"/></svg></button>
+          </div>
+        </form>
+      </section>
+
+      <!-- side panel: Review · Context · yapping (plugin tab) -->
+      <section class="oc-side" id="oc-side">
+        <div class="oc-side-tabs">
+          <button class="oc-side-tab">Review <span class="n">3</span></button>
+          <button class="oc-side-tab">Context</button>
+          <button class="oc-side-tab active" id="yap-tab">yapping <span class="n hot" id="yap-tab-n"></span></button>
+          <span class="plug">plugin</span>
+          <div class="sp"></div>
+          <button class="oc-ib" title="Expand"><svg viewBox="0 0 20 20"><path d="M12 4h4v4M8 16H4v-4M16 4l-5 5M4 16l5-5"/></svg></button>
+        </div>
+        <div id="yap" class="yap" data-theme="light"></div>
+      </section>
+    </main>
+
+    <!-- opencode toast region (ui/src/components/toast.css: fixed, bottom 48 / right 32) -->
+    <div class="oc-toasts" id="oc-toasts"></div>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

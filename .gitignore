@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+# written by Claude Code when it loads the mod
+plugins/claude/.claude-plugin/types/
+plugins/claude/tsconfig.json
+# pi pack step
+plugins/pi/vendor/

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>yapping · Claude Code desktop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="mac">
+  <!-- ───────── Claude Code sidebar ───────── -->
+  <aside class="side">
+    <div class="side-top">
+      <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+      <button class="ico" title="Toggle sidebar"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="2.5"/><path d="M6 2.5v11"/></svg></button>
+    </div>
+    <div class="modes"><span>Chat</span><span>Cowork</span><span class="on">Code</span></div>
+    <button class="newsess"><svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M7 2v10M2 7h10"/></svg>New session<kbd>⌘N</kbd></button>
+    <div class="side-search"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.6"/><path d="m10.5 10.5 3 3" stroke-linecap="round"/></svg>Search sessions</div>
+    <nav class="sessions">
+      <div class="proj"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.6l1.4 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z"/></svg>yapping</div>
+      <a class="sess on"><span class="spin"></span>relay — per-socket fanout</a>
+      <a class="sess">mockups gallery index</a>
+      <a class="sess">claude-desktop mod pane</a>
+      <a class="sess dim">sim.js — bridge nudges</a>
+      <div class="proj"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.6l1.4 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z"/></svg>equi-platform</div>
+      <a class="sess">donor SRM — import dedupe</a>
+      <a class="sess">policy — RLS for orgs</a>
+      <a class="sess dim">growth — landing copy</a>
+      <div class="proj"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.6l1.4 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z"/></svg>AIT-Companion</div>
+      <a class="sess">whisper.cpp streaming</a>
+      <a class="sess dim">barbican — OSM import</a>
+    </nav>
+    <div class="me">
+      <span class="me-av">L</span>
+      <div><b>Luqmaan</b><small>Max plan</small></div>
+      <svg class="me-gear" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
+    </div>
+  </aside>
+
+  <!-- ───────── Claude Code main transcript ───────── -->
+  <main class="center">
+    <header class="sess-head">
+      <div class="sh-title">relay — per-socket fanout <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m2.5 3.8 2.5 2.5 2.5-2.5"/></svg></div>
+      <div class="sh-meta"><span class="chip-mono"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="3.5" r="1.8"/><circle cx="4" cy="12.5" r="1.8"/><circle cx="12" cy="5.5" r="1.8"/><path d="M4 5.3v5.4M12 7.3c0 3-4 2.5-7.2 4"/></svg>main</span><span class="path">~/repos/yapping</span></div>
+      <div class="sh-right"><button class="ghost">Share</button><button class="ico"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></button></div>
+    </header>
+
+    <div class="transcript" id="transcript">
+      <div class="turn user"><p>the relay drops events when two tabs connect as the same user. can you make the fanout per-socket and add a <code>?since=</code> replay so a reconnecting pane catches up?</p></div>
+
+      <div class="turn asst">
+        <p>I'll start by looking at how the relay fans events out to sockets.</p>
+        <div class="tool"><span class="dot ok"></span><b>Read</b> <span class="arg">relay/server.ts</span><span class="muted">110 lines</span></div>
+        <div class="tool"><span class="dot ok"></span><b>Grep</b> <span class="arg">"since\(" in shared/</span><span class="muted">3 matches</span></div>
+        <h3>What's going on</h3>
+        <p>The fan-out loop already filters per socket, but <code>sim.since()</code> rescans the whole 3,000-event log for <em>every</em> socket on <em>every</em> event — so with two tabs it's quadratic, and the second tab's send races the first. I'll index the log by <code>seq</code> and replay from it on connect.</p>
+        <div class="todo">
+          <div class="todo-h">Update Todos</div>
+          <div class="t done"><i></i>Find where fanout happens</div>
+          <div class="t done"><i></i>Index event log by <code>seq</code></div>
+          <div class="t now"><i></i>Add <code>?since=</code> replay on WebSocket open</div>
+          <div class="t"><i></i>Test with two tabs as luqmaan</div>
+        </div>
+        <div class="tool"><span class="dot ok"></span><b>Edit</b> <span class="arg">shared/sim.js</span><span class="add">+12</span><span class="del">−3</span></div>
+        <div class="diff">
+          <div class="dl ctx"><span>201</span>  function since(userId, after = 0) {</div>
+          <div class="dl del"><span>202</span>−   return log.filter((e) =&gt; e.seq &gt; after &amp;&amp; eventVisible(userId, e))</div>
+          <div class="dl add"><span>202</span>+   const start = bisect(log, after)</div>
+          <div class="dl add"><span>203</span>+   return log.slice(start).filter((e) =&gt; eventVisible(userId, e))</div>
+        </div>
+        <div class="tool"><span class="dot ok"></span><b>Edit</b> <span class="arg">relay/server.ts</span><span class="add">+8</span><span class="del">−1</span></div>
+        <div class="tool"><span class="dot ok"></span><b>Bash</b> <span class="arg">bun test relay</span></div>
+        <pre class="out"><span class="g">✓</span> relay › fans out to both tabs  <span class="m">[3ms]</span>
+<span class="g">✓</span> relay › replays from ?since=41  <span class="m">[5ms]</span>
+<span class="g">✓</span> sim › bisect finds first seq  <span class="m">[1ms]</span>
+ <b>9 pass</b>  0 fail  <span class="m">Ran 9 tests across 2 files. [41ms]</span></pre>
+        <p>All green. Now wiring the replay into the WebSocket <code>open</code> handler so a reconnecting pane gets everything it missed…</p>
+      </div>
+      <div class="working"><span class="star"></span><span class="w-word">Percolating…</span><span class="muted">(41s · ↓ 2.1k tokens · esc to interrupt)</span></div>
+    </div>
+
+    <div class="dock">
+      <div class="peekband" id="peek"></div>
+      <div class="prompt">
+        <div class="pr-input" contenteditable="true" data-ph="Reply to Claude…"></div>
+        <div class="pr-row">
+          <button class="pr-btn" title="Attach"><svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>
+          <button class="pr-pill"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 4 4 4-4 4M8.5 4l4 4-4 4"/></svg>Accept edits</button>
+          <span class="grow"></span>
+          <button class="pr-model">Opus 5.5 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m2.5 3.8 2.5 2.5 2.5-2.5"/></svg></button>
+          <button class="pr-send" title="Send"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg></button>
+        </div>
+      </div>
+      <div class="statusline" id="statusline"></div>
+    </div>
+    <div class="toasts" id="toasts"></div>
+  </main>
+
+  <!-- ───────── side pane: Diff · Terminal · Preview · yapping ───────── -->
+  <section class="pane">
+    <nav class="pane-tabs">
+      <button>Diff <span class="tcount">2</span></button>
+      <button>Terminal</button>
+      <button>Preview</button>
+      <button class="on" id="yapTab">Chats<span class="tbadge" id="tabBadge"></span></button>
+      <span class="grow"></span>
+      <button class="ico" title="Pop out"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button>
+      <button class="ico" title="Close pane"><svg width="14" height="14" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+    </nav>
+    <div class="yap" id="yap">
+      <nav class="list" id="list">
+        <div class="l-top">
+          <button class="l-btn" id="searchBtn" title="Search chats"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.6"/><path d="m10.5 10.5 3 3" stroke-linecap="round"/></svg></button>
+          <button class="l-btn" title="New message"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5 13.5 5 6 12.5 3 13l.5-3Z"/></svg></button>
+        </div>
+        <input class="l-input" id="search" placeholder="Search" autocomplete="off">
+        <div class="rail" id="rail"></div>
+      </nav>
+      <section class="chat" id="chat">
+        <header class="ch" id="chatHead"></header>
+        <div class="msgs" id="msgs"></div>
+        <div class="foot" id="foot">
+          <div class="bridge-line" id="bridgeLine"></div>
+          <div class="replying" id="replying"></div>
+          <form class="composer" id="composer" autocomplete="off">
+            <button type="button" class="c-ico" title="Attach"><svg width="15" height="15" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>
+            <textarea id="input" rows="1" placeholder="Message"></textarea>
+            <button type="submit" class="send" title="Send"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg></button>
+          </form>
+        </div>
+        <aside class="sheet" id="sheet" aria-hidden="true"></aside>
+        <aside class="profile" id="profile" aria-hidden="true"></aside>
+      </section>
+    </div>
+  </section>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

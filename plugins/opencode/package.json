@@ -1,0 +1,30 @@
+{
+  "name": "opencode-yapping",
+  "version": "0.1.0",
+  "description": "yapping for opencode: chat with people (and their cats) from your coding agent",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./server": "./server.ts",
+    "./tui": "./tui.tsx"
+  },
+  "files": [
+    "server.ts",
+    "tui.tsx",
+    "lib",
+    "README.md"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "yapping",
+    "chat"
+  ],
+  "engines": {
+    "opencode": ">=2.0.0"
+  },
+  "scripts": {
+    "sync": "cp ../../shared/sim.js lib/sim.js",
+    "prepack": "cp ../../shared/sim.js lib/sim.js"
+  }
+}
