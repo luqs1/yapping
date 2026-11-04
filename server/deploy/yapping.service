@@ -1,0 +1,29 @@
+# /etc/systemd/system/yapping.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now yapping
+#   journalctl -u yapping -f
+[Unit]
+Description=yapping server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yapping
+Group=yapping
+WorkingDirectory=/opt/yapping/server
+EnvironmentFile=/etc/yapping/env
+ExecStart=/usr/local/bin/bun run src/index.ts
+Restart=always
+RestartSec=2
+
+# Hardening. The only writable place is the data dir.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/yapping
+StateDirectory=yapping
+Environment=BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
+
+[Install]
+WantedBy=multi-user.target

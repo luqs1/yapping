@@ -1,0 +1,16 @@
+{
+  "name": "yapping-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build.ts",
+    "watch": "bun --watch build.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@modelcontextprotocol/core": "^2.4.0",
+    "uqr": "^0.1.2",
+    "zod": "^4.1.0"
+  }
+}

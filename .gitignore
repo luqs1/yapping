@@ -5,3 +5,7 @@ plugins/claude/.claude-plugin/types/
 plugins/claude/tsconfig.json
 # pi pack step
 plugins/pi/vendor/
+# build output (binaries are published to the server, not committed)
+node/dist/
+ui/dist/
+*.db
