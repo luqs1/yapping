@@ -1,10 +1,20 @@
 {
   "name": "yapping",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Chat with people in a pane beside Claude. Claude helps, in the chats you let it see.",
   "types": "./types/index.d.ts",
   "userConfig": {
-    "relay": { "type": "string", "title": "Relay URL", "description": "Where your yapping relay runs", "default": "http://localhost:7788" },
-    "user": { "type": "string", "title": "You are", "description": "Your yapping user id", "default": "luqmaan" }
+    "node": {
+      "type": "string",
+      "title": "yapping node",
+      "description": "Where the yapping node on this Mac listens",
+      "default": "http://127.0.0.1:7790"
+    },
+    "home": {
+      "type": "string",
+      "title": "yapping folder",
+      "description": "Leave empty for ~/.yapping",
+      "default": ""
+    }
   }
 }

@@ -1,6 +1,8 @@
 // The routes, wired into one Bun.serve. index.ts starts it for real; the
 // tests start it on a random port.
 
+import { sessionUser } from './users'
+import { homePage } from './home'
 import { existsSync, statSync } from 'node:fs'
 import { join, normalize, sep } from 'node:path'
 import type { Server } from 'bun'
@@ -35,7 +37,7 @@ export function startServer(env: Record<string, string | undefined> = process.en
     idleTimeout: 60,
     routes: {
       // Sign-in and the account page.
-      '/': () => redirect('/account'),
+      '/': r((c, req) => homePage(c.cfg.origin, !!sessionUser(c.db, req))),
       '/signin': { GET: r(auth.signinPage) },
       '/signout': { POST: r(auth.signout) },
       '/account': { GET: r(auth.accountPage) },

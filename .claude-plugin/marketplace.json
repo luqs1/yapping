@@ -1,0 +1,5 @@
+{
+  "name": "yapping",
+  "owner": { "name": "Luqmaan" },
+  "plugins": [{ "name": "yapping", "source": "./plugins/claude", "description": "Chat with your team in a pane beside Claude. Claude helps, in the chats you let it see." }]
+}

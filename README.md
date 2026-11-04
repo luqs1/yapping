@@ -1,69 +1,54 @@
 # yapping
 
-A messenger that lives in the sidebar of the agent harness you already use all
-day (Claude Code, opencode, pi), plus an app for your phone.
+Chat with your team in a sidebar beside your AI: Claude Code, Claude (chat and
+Cowork), ChatGPT, and Codex. People text people. Your AI can help, only in the
+chats you let it see, and nothing it prepares is sent until you press Send.
 
-People text people. Your agent (the harness you're in) can see the chats you
-let it see, one switch per chat. It never posts in the chat: it shows up as a
-small chibi of its own logo under the message it's handling. It reads, talks to
-the other person's agent when there's something to sort out, and when it has
-something ready (a link, a file, an invite) it asks: **Send** or **Not now**.
-What you approve goes out as your message.
+Messages live on each person's Mac, end to end encrypted. The server at
+`yap.luqmaan.dev` only does sign-in, the contact book and relationships, and
+orchestration: presence, relaying encrypted messages, a sealed mailbox for
+Macs that are asleep, and passing chat apps' requests through to your Mac.
+WhatsApp is bridged on your own Mac.
 
-Chats from WhatsApp, iMessage and Slack sit in the same list, with one honest
-line about what you'd gain by moving them over.
+## Install
 
-## Run it
+1. On your Mac:
 
-```sh
-bun relay/server.ts          # http://localhost:7788 serves the gallery and every mockup
-```
+   ```sh
+   curl -fsSL https://yap.luqmaan.dev/install.sh | sh
+   ```
 
-Open a mockup twice, the second time with `?user=finn`, and the two windows
-chat through the relay; Finn sees his own agent on the same messages. Without
-the relay a mockup runs everything in the page.
+2. Where you work (any or all):
 
-In Finn's chat try "hey can you take a look at my demo?" or "can we grab 30 min
-thursday?". Theo's Slack chat has the API docs ready to send. Mum's chat is
-hidden from the agent until you switch it on.
+   - **Claude Code**, in a terminal:
 
-## The mockups
+     ```
+     /plugin install yapping --marketplace luqs1/yapping
+     ```
 
-| Harness | Design language | Path |
-| --- | --- | --- |
-| Claude Code desktop | Claude's own | `mockups/claude-desktop/` |
-| opencode | PostHog's art style | `mockups/opencode/` |
-| pi | Discord, in a terminal | `mockups/pi/` |
-| Phone (installable web app) | WhatsApp | `mockups/mobile/` |
+     then `/yap`. In the desktop app: + next to the prompt › Plugins › Add
+     marketplace `luqs1/yapping` › Add yapping.
+   - **Claude chat and Cowork**: Settings › Connectors › Add custom connector ›
+     `https://yap.luqmaan.dev/mcp`.
+   - **ChatGPT and the Codex app**: Settings › Apps › Advanced › Developer mode ›
+     Create app › `https://yap.luqmaan.dev/mcp` (on Business/Enterprise an admin
+     adds it).
+   - **Codex CLI**: `codex mcp add yapping -- yap mcp`
 
-Each takes `?demo=demo|schedule|theo|bridge` (add `&approve=1`), `?observe=1`,
-`?chat=<id>` and `?offline=1`.
+3. Invite your teammate: `yap invite`, or from your account page.
 
-## The plugins
-
-Each gives the agent tools to read the inbox and a chat, send the user's exact
-words, and (Claude, pi) see or approve what's waiting.
-
-- **Claude Code** (`plugins/claude/`): the Chats pane in Claude's own theme,
-  proposals in the band above the prompt, counts in the status line, toasts,
-  `/yap`, and `yap_inbox`, `yap_read`, `yap_send`, `yap_approve`.
-  `claude --plugin-dir plugins/claude`
-- **opencode v2** (`plugins/opencode/`): a `/yap` page and session side panel in
-  PostHog colours. `cd plugins/opencode/demo && opencode --standalone`
-- **pi** (`plugins/pi/`): a Discord-style overlay on ctrl+q or `/yap`, a widget
-  above the editor. `pi -e plugins/pi`
+The same steps live at https://yap.luqmaan.dev.
 
 ## Layout
 
 ```
-relay/server.ts       stand-in control plane: WebSocket + HTTP long-poll, static files
-shared/sim.js         people, chats, assists and the scripted flows; one reducer for every client
-shared/chibi.js       the chibi harness marks (reading, talking, ready, done, sleeping)
-shared/yap-client.js  browser/Node client; falls back to running sim.js in the page
-mockups/              the gallery and the four mockups
-plugins/              the Claude Code, opencode and pi plugins
-SPEC.md               the product rules every surface follows
+server/    sign-in, contacts, relay + mailbox, gateway, OAuth, remote MCP (Bun, on hetzner-arm)
+node/      the Mac node: keys, SQLite, E2E, local API, `yap` CLI, WhatsApp bridge
+ui/        the sidebar: one bundle for MCP hosts, the local page and the demo
+plugins/   the Claude Code mod (plus the earlier opencode and pi prototypes)
+docs/      protocol, build plan, research
+mockups/   the design mockups and the chibi lab (served by relay/, the demo relay)
+shared/    sim.js (demo world and UI shapes) and chibi.js (the agent marks)
 ```
 
-The relay stands in for a real peer-to-peer control plane (the agentbus/iroh
-layer) so the product could be designed first.
+See `docs/protocol.md` for how the pieces talk.

@@ -17,12 +17,16 @@ const theo = Object.values(SNAP.assists).find((a: any) => a.chatId === 'br-theo'
 
 function relay(on: any) {
   mock.clock(on)
+  // The node's local API: /rpc answers by method; state is the fixture.
   on('http.fetch', (_: unknown, e: any) => {
-    const url = String(e.url)
-    if (e.init?.method === 'POST') sent.push(JSON.parse(e.init.body))
-    const body = url.includes('/api/snapshot') ? SNAP : url.includes('/api/events') ? { seq: SNAP.seq, events: [] } : { ok: true }
-    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(body) } }
+    const req = e.init?.body ? JSON.parse(e.init.body) : {}
+    sent.push(req)
+    const result = req.method === 'state' ? SNAP : req.method === 'sync' ? { seq: SNAP.seq, events: [] } : req.method === 'invite' ? { url: 'https://yap.luqmaan.dev/i/abc' } : { ok: true }
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ result }) } }
   })
+  on('fs.read', () => ({ value: 'local-token-for-tests' }))
+  on('env.get', () => ({ value: '/Users/test' }))
+  on('ui.copy', () => ({ value: { isCopied: true } }))
   on('command.register', () => ({ value: { command: 'yap' } }))
   on('tool.register', (_: unknown, e: any) => ({ value: { tool: `mcp__yapping__${e.name}` } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -37,12 +41,15 @@ async function start($: any, on: any) {
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
 }
 
+const call = (method: string, params: Record<string, unknown>) => ({ method, params: { ...params, harness: 'claude' } })
+
 test('the inbox lists people, the bridge, and what Claude has ready', async ($, on) => {
   await start($, on)
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     expect(await ui.find({ type: 'Text', text: /^Finn$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Acme API docs v3\.pdf/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /WhatsApp/ })).toBeDefined()
     await ui.unmount()
   }
 })
@@ -56,42 +63,47 @@ test('opening Finn shows the chat, the agents talking, and sends human words', a
     expect(await ui.find({ type: 'Text', text: /Talking to Finn's opencode/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Claude can see this chat/ })).toBeDefined()
     await ui.input({ key: 'compose-dm-finn', text: 'see you thursday' })
-    expect(sent).toContainEqual({ t: 'send', chatId: 'dm-finn', text: 'see you thursday', client: 'claude' })
+    expect(sent).toContainEqual(call('send', { chat: 'dm-finn', text: 'see you thursday' }))
     await ui.press({ key: 'back' })
     await ui.unmount()
   }
 })
 
-test("Theo's docs can be sent from the band above the prompt", async ($, on) => {
+test("a proposal lives only in the pane: Theo's docs are approved there, never from the band", async ($, on) => {
+  // The engine's own band, beneath the plugin: registered before the session starts.
+  on('ui.render', ($: any, e: any) => { const { Text } = $.ui.resolve(e); return <Text>engine</Text> })
   await start($, on)
   const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect(await band.find({ type: 'Text', text: /Send Theo/ })).toBeDefined()
-  await band.press({ key: 'band-send' })
-  expect(sent).toContainEqual({ t: 'approve', chatId: 'br-theo', assistId: theo.id, client: 'claude' })
+  expect(await band.find({ type: 'Text', text: /Send Theo/ })).toBeUndefined()
   await band.unmount()
-})
-
-test('a bridged chat says so quietly, and Claude can be let in or kept out', async ($, on) => {
-  await start($, on)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'chat-br-mum' })
-  expect(await ui.find({ type: 'Text', text: /Hidden from Claude/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Their agent can't join you on WhatsApp/ })).toBeDefined()
-  await ui.press({ key: 'sees' })
-  expect(sent).toContainEqual({ t: 'set_sees', chatId: 'br-mum', on: true, client: 'claude' })
-  await ui.press({ key: 'invite' })
-  expect(sent).toContainEqual({ t: 'invite_p2p', chatId: 'br-mum', client: 'claude' })
+  await ui.press({ key: 'chat-br-theo' })
+  await ui.press({ key: `ok-${theo.id}` })
+  expect(sent).toContainEqual(call('approve', { id: theo.id }))
   await ui.unmount()
 })
 
-test('Claude reads, sends and approves through its tools', async ($, on) => {
+test('a bridged chat says which network it is on, and Claude can be let in or kept out', async ($, on) => {
   await start($, on)
-  const inbox = await $.tool.call({ tool: 'mcp__yapping__yap_inbox' } as any)
-  expect(String((inbox as any).result)).toContain('ready for approval: Send Theo')
-  const hidden = await $.tool.call({ tool: 'mcp__yapping__yap_read', chat: 'Mum' } as any)
-  expect(String((hidden as any).result)).toContain("hasn't let Claude see")
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'chat-br-mum' })
+  expect(await ui.find({ type: 'Text', text: /^on WhatsApp/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Hidden from Claude/ })).toBeDefined()
+  await ui.press({ key: 'sees' })
+  expect(sent).toContainEqual(call('set_sees', { chat: 'br-mum', on: true }))
+  await ui.press({ key: 'invite' })
+  expect(sent).toContainEqual(call('invite', {}))
+  await ui.unmount()
+})
+
+test('Claude reads, sends and proposes through the node', async ($, on) => {
+  await start($, on)
+  await $.tool.call({ tool: 'mcp__yapping__yap_inbox' } as any)
+  expect(sent).toContainEqual(call('inbox', {}))
+  await $.tool.call({ tool: 'mcp__yapping__yap_read', chat: 'Mum' } as any)
+  expect(sent).toContainEqual(call('read', { chat: 'Mum', limit: 15 }))
   await $.tool.call({ tool: 'mcp__yapping__yap_send', chat: 'Finn', text: 'running 5 late' } as any)
-  expect(sent).toContainEqual({ t: 'send', chatId: 'dm-finn', text: 'running 5 late', client: 'claude' })
-  await $.tool.call({ tool: 'mcp__yapping__yap_approve', chat: 'Theo' } as any)
-  expect(sent).toContainEqual({ t: 'approve', chatId: 'br-theo', assistId: theo.id, client: 'claude' })
+  expect(sent).toContainEqual(call('send', { chat: 'Finn', text: 'running 5 late' }))
+  await $.tool.call({ tool: 'mcp__yapping__yap_propose', chat: 'Finn', label: 'Send Finn the deck?', payload: { kind: 'file', title: 'deck.pdf' } } as any)
+  expect(sent.some(s => s.method === 'propose' && s.params.label === 'Send Finn the deck?')).toBe(true)
 })

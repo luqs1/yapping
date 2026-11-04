@@ -17,18 +17,36 @@ const liveA = atom({ plugin: 'yapping', key: 'live' } as const, false)
 
 const ACTIVE = ['reading', 'waiting', 'talking', 'working']
 const ATTACH_ICON: Record<string, string> = { link: '🔗', file: '📄', event: '📅' }
+// Each bridged network wears its own colour, so it's never mistaken for ours.
+const NET_COLOR: Record<string, string> = { whatsapp: '#1FA855', slack: '#611F69', imessage: '#2F9E44', telegram: '#229ED9' }
 
 type $ = EngineInterface
 
-let base = 'http://localhost:7788'
-let me = 'luqmaan'
+let base = 'http://127.0.0.1:7790'
+let home = ''
+let token = ''
+let me = ''
 let seq = 0
 let busy = false
 
-async function fetchJSON($: $, path: string, body?: unknown) {
-  const r = await $.http.fetch(`${base}${path}${path.includes('?') ? '&' : '?'}user=${me}`, body === undefined ? undefined : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-  if (!r.ok) throw new Error(`relay ${r.status}`)
-  return JSON.parse(r.text)
+// The node on this Mac holds the messages; its local API is gated by a
+// token it writes to ~/.yapping/local-token.
+async function nodeToken($: $) {
+  if (token) return token
+  const dir = home || `${(await $.env.get('HOME')) ?? ''}/.yapping`
+  token = (await $.fs.read(`${dir}/local-token`)).trim()
+  return token
+}
+
+async function rpc($: $, method: string, params: Record<string, unknown> = {}) {
+  const r = await $.http.fetch(`${base}/rpc`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-yap-token': await nodeToken($) },
+    body: JSON.stringify({ method, params: { ...params, harness: 'claude' } }),
+  })
+  const out = JSON.parse(r.text || '{}')
+  if (!r.ok || out.error) throw new Error(out.error?.message ?? `node ${r.status}`)
+  return out.result
 }
 
 function trim(s: any): Snap {
@@ -43,63 +61,62 @@ function trim(s: any): Snap {
   }
 }
 
-const unreadOf = (snap: Snap) => snap.chats.reduce((n, c) => n + (c.unread?.[me] ?? 0), 0)
+const unreadOf = (snap: Snap) => snap.chats.reduce((n, c) => n + (c.unread?.[snap.me] ?? 0), 0)
 const readyOf = (snap: Snap) => snap.assists.filter(a => a.state === 'ready')
 
 async function refresh($: $) {
-  const snap = trim(await fetchJSON($, '/api/snapshot'))
+  const snap = trim(await rpc($, 'state'))
+  me = snap.me
   seq = snap.seq
   await update($, snapA, () => snap)
   await update($, liveA, () => true)
   const unread = unreadOf(snap)
   const ready = readyOf(snap).length
-  const parts = [unread ? `${unread} unread` : '', ready ? `Claude has ${ready} ready for you` : ''].filter(Boolean)
+  const parts = [unread ? `${unread} unread` : '', ready ? `${ready} waiting for you` : ''].filter(Boolean)
   $.ui.status(parts.length ? parts.join(' · ') : undefined)
   return snap
 }
 
+// New messages from people raise the reply band; proposals stay in the pane.
 async function poll($: $) {
   if (busy) return
   busy = true
   try {
-    const { events } = await fetchJSON($, `/api/events?since=${seq}`)
-    if (!events.length) return
-    const snap = await read($, snapA)
+    const out = await rpc($, 'sync', { since: seq })
+    const events: any[] = out.reset ? [] : out.events ?? []
     for (const ev of events) {
       if (ev.type === 'message' && ev.message.from !== me && ev.message.kind === 'text') {
-        $.ui.toast(`${snap?.users[ev.message.from]?.name ?? ev.message.from}: ${ev.message.text.slice(0, 80)}`)
         await update($, viewA, v => ({ ...v, band: ev.message.id }))
       }
-      if (ev.type === 'assist' && ev.assist.state === 'ready' && !snap?.assists.some(a => a.id === ev.assist.id && a.state === 'ready')) {
-        $.ui.toast(ev.assist.proposal?.label ?? 'Claude has something ready')
-      }
     }
-    await refresh($)
+    if (out.reset || events.length) await refresh($)
+    else await update($, liveA, () => true)
   } catch {
+    token = ''
     await update($, liveA, () => false)
   } finally {
     busy = false
   }
 }
 
-// A press while the relay is down says so instead of throwing.
+// A press while the node is down says so instead of throwing.
 async function offlineNotice($: $) {
   await update($, liveA, () => false)
-  $.ui.toast("Chats are offline, so that didn't go through")
+  $.ui.toast("yapping isn't running on this Mac, so that didn't go through")
 }
 
 async function send($: $, chatId: string, text: string) {
   try {
-    await fetchJSON($, '/api/action', { t: 'send', chatId, text, client: 'claude' })
+    await rpc($, 'send', { chat: chatId, text })
     await refresh($)
   } catch {
     await offlineNotice($)
   }
 }
 
-async function act($: $, action: Record<string, unknown>) {
+async function act($: $, method: string, params: Record<string, unknown>) {
   try {
-    await fetchJSON($, '/api/action', { ...action, client: 'claude' })
+    await rpc($, method, params)
     await refresh($)
   } catch {
     await offlineNotice($)
@@ -108,8 +125,29 @@ async function act($: $, action: Record<string, unknown>) {
 
 async function select($: $, chatId: string | null) {
   await update($, viewA, v => ({ ...v, chat: chatId, band: chatId ? null : v.band }))
-  if (chatId) await fetchJSON($, '/api/action', { t: 'read', chatId }).catch(() => {})
+  if (chatId) await rpc($, 'mark_read', { chat: chatId }).catch(() => {})
   await refresh($).catch(() => {})
+}
+
+// An invite link to send the person, copied for pasting into their app.
+async function invite($: $, surface: 'terminal' | 'desktop') {
+  try {
+    const out = await rpc($, 'invite', {})
+    const url = String(out?.url ?? out)
+    await $.ui.copy({ text: url, surface }).catch(() => {})
+    $.ui.toast(`Invite link copied: ${url}`)
+  } catch {
+    await offlineNotice($)
+  }
+}
+
+// A tool's answer: the node's reply as JSON, or its refusal in words.
+async function answer($: $, method: string, params: Record<string, unknown>) {
+  try {
+    return { result: JSON.stringify(await rpc($, method, params), null, 1) }
+  } catch (err) {
+    return { result: `yapping: ${(err as Error).message}` }
+  }
 }
 
 async function toggle($: $, id: string) {
@@ -133,20 +171,20 @@ const bridgeName = (snap: Snap, t: string) => snap.bridges[t]?.name ?? t
 const time = (ts: number) => new Date(ts).toTimeString().slice(0, 5)
 
 export const register: Register = (on, options) => {
-  base = String(options.relay ?? 'http://localhost:7788').replace(/\/$/, '')
-  me = String(options.user ?? 'luqmaan')
+  base = String(options.node ?? 'http://127.0.0.1:7790').replace(/\/$/, '')
+  home = String(options.home ?? '')
 
   // ── lifecycle ────────────────────────────────────────────────────────
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'yap', description: 'Open your chats', argumentHint: '[person]' })
     await $.tool.register({
       name: 'yap_inbox',
-      description: "List the user's chats with unread counts, the latest message in each, and anything you (Claude) have ready for their approval.",
+      description: "List the user's chats: who, which network (yapping, WhatsApp, Slack), unread counts, the latest message in chats the user lets you see, and anything you've proposed that's waiting for them.",
       isDeferred: false,
     })
     await $.tool.register({
       name: 'yap_read',
-      description: 'Read recent messages of one chat. `chat` is a chat id or a name like "Finn", "Mum", "fall26 cohort". Only chats the user lets Claude see.',
+      description: 'Read recent messages of one chat. `chat` is a chat id or a person\'s name. Only works for chats the user has let you see; otherwise tell them they can switch it on in the chat header.',
       inputSchema: { type: 'object', properties: { chat: { type: 'string' }, limit: { type: 'number' } }, required: ['chat'] },
       isDeferred: false,
     })
@@ -157,12 +195,22 @@ export const register: Register = (on, options) => {
       isDeferred: false,
     })
     await $.tool.register({
-      name: 'yap_approve',
-      description: 'Approve something you have ready in a chat (a link, file or invite waiting for the user). Only after the user explicitly says yes to it. `chat` is a chat id or name.',
-      inputSchema: { type: 'object', properties: { chat: { type: 'string' } }, required: ['chat'] },
+      name: 'yap_propose',
+      description: 'Offer to send something for the user in a chat you can see (a link, a file, an invite, a short text they dictated). It appears under the message in their sidebar with Send / Not now; nothing goes out until they press Send. `label` is the question, e.g. "Send Finn the demo link?".',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          chat: { type: 'string' },
+          msgId: { type: 'string', description: 'the message this is about (optional)' },
+          label: { type: 'string' },
+          detail: { type: 'string' },
+          action: { type: 'string', description: 'button text, e.g. "Send"' },
+          payload: { type: 'object', description: '{kind:"text"|"link"|"file"|"event", text?, title?, subtitle?, url?}' },
+        },
+        required: ['chat', 'label', 'payload'],
+      },
       isDeferred: false,
     })
-    await fetchJSON($, '/api/presence', { status: 'online', client: 'claude' }).catch(() => {})
     await refresh($).catch(() => update($, liveA, () => false))
     $.clock.every(1500, () => void poll($))
     $.clock.every(400, async () => {
@@ -173,87 +221,57 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('session.end', async ($, e, next) => {
-    await fetchJSON($, '/api/presence', { status: 'offline', client: 'claude' }).catch(() => {})
-    return next(e)
-  })
-
   on('command.run', { command: 'yap' }, async ($, e) => {
     const chat = e.args ? resolveChat(await read($, snapA), String(e.args).trim()) : undefined
     await openPane($, chat?.id)
     return { text: chat ? `Opened ${chat.title}` : 'Opened your chats' }
   })
 
-  // ── tools for Claude ────────────────────────────────────────────────
-  on('tool.call', { tool: 'mcp__yapping__yap_inbox' }, async $ => {
-    const snap = await refresh($)
-    const lines = snap.chats.map(c => {
-      const last = snap.messages[c.id]?.filter(m => m.kind !== 'system').at(-1)
-      const n = c.unread?.[me] ?? 0
-      const ready = snap.assists.find(a => a.chatId === c.id && a.state === 'ready')
-      const seen = sees(snap, c)
-      return `${c.id} — ${c.title}${c.transport !== 'yap' ? ` (via ${bridgeName(snap, c.transport)})` : ''}${n ? ` · ${n} unread` : ''}${seen ? '' : ' · hidden from Claude'}${seen && last ? `\n   last: ${snap.users[last.from]?.name}: ${last.text || last.attachment?.title}` : ''}${ready ? `\n   ready for approval: ${ready.proposal?.label}` : ''}`
-    })
-    return { result: lines.join('\n') }
-  })
-
+  // ── tools for Claude: all answered by the node, which enforces "sees" ──
+  on('tool.call', { tool: 'mcp__yapping__yap_inbox' }, async $ => answer($, 'inbox', {}))
   on('tool.call', { tool: 'mcp__yapping__yap_read' }, async ($, e) => {
     const input = e as unknown as { chat: string; limit?: number }
-    const snap = await refresh($)
-    const chat = resolveChat(snap, input.chat)
-    if (!chat) return { result: `No chat matches "${input.chat}". Chats: ${snap.chats.map(c => c.title).join(', ')}` }
-    if (!sees(snap, chat)) return { result: `The user hasn't let Claude see their chat with ${chat.title}. They can turn it on from the chat header.` }
-    const msgs = (snap.messages[chat.id] ?? []).slice(-(input.limit ?? 15))
-    return { result: msgs.map(m => `[${time(m.ts)}] ${m.from === 'system' ? '·' : snap.users[m.from]?.name}: ${m.text || `<${m.attachment?.type}: ${m.attachment?.title}>`}`).join('\n') }
+    return answer($, 'read', { chat: input.chat, limit: input.limit ?? 15 })
   })
-
   on('tool.call', { tool: 'mcp__yapping__yap_send' }, async ($, e) => {
     const input = e as unknown as { chat: string; text: string }
-    const chat = resolveChat(await read($, snapA), input.chat)
-    if (!chat) return { result: `No chat matches "${input.chat}".` }
-    await send($, chat.id, input.text)
-    return { result: `Sent to ${chat.title}.` }
+    const out = await answer($, 'send', { chat: input.chat, text: input.text })
+    await refresh($).catch(() => {})
+    return out
+  })
+  on('tool.call', { tool: 'mcp__yapping__yap_propose' }, async ($, e) => {
+    const input = e as unknown as Record<string, unknown>
+    const { tool, tool_use_id, ...params } = input
+    const out = await answer($, 'propose', { action: 'Send', ...params })
+    await refresh($).catch(() => {})
+    return out
   })
 
-  on('tool.call', { tool: 'mcp__yapping__yap_approve' }, async ($, e) => {
-    const input = e as unknown as { chat: string }
-    const snap = await refresh($)
-    const chat = resolveChat(snap, input.chat)
-    const a = chat && snap.assists.find(x => x.chatId === chat.id && x.state === 'ready')
-    if (!chat || !a) return { result: `Nothing is waiting for approval${chat ? ` in ${chat.title}` : ''}.` }
-    await act($, { t: 'approve', chatId: chat.id, assistId: a.id })
-    return { result: `Approved: ${a.proposal?.label}` }
-  })
-
-  // ── the band above the prompt ───────────────────────────────────────
+  // ── the reply band above the prompt: new messages from people only ──
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const snap = await read($, snapA)
     if (!snap || e.props.hasSurvey) return next(e)
     const view = await read($, viewA)
-    const { Box, Text, Button } = $.ui.resolve(e)
-    const ready = readyOf(snap)[0]
-    if (ready) {
-      const chat = snap.chats.find(c => c.id === ready.chatId)
-      return (
-        <Box flexDirection="row" gap={1}>
-          <Text color="claude" bold>✳ {chat?.title}</Text>
-          <Text wrap="truncate-end">{ready.proposal?.label}</Text>
-          <Button key="band-send" label={ready.proposal?.action ?? 'Send'} variant="primary" onPress={() => act($, { t: 'approve', chatId: ready.chatId, assistId: ready.id })} />
-          <Button key="band-open" label="Open" onPress={() => openPane($, ready.chatId)} />
-          <Button key="band-skip" label="×" plain onPress={() => act($, { t: 'dismiss', chatId: ready.chatId, assistId: ready.id })} />
-        </Box>
-      )
-    }
     const m = view.band ? Object.values(snap.messages).flat().find(x => x.id === view.band) : undefined
     if (!m) return next(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const chat = snap.chats.find(c => c.id === m.chatId)
+    const via = chat && chat.transport !== 'yap' ? ` on ${bridgeName(snap, chat.transport)}` : ''
     return (
       <Box flexDirection="row" gap={1}>
-        <Text bold>{snap.users[m.from]?.name}</Text>
+        <Text bold>{snap.users[m.from]?.name}{via}</Text>
         <Text wrap="truncate-end">{m.text}</Text>
         <Button key="band-reply" label="Reply" variant="primary" onPress={() => openPane($, m.chatId)} />
         <Button key="band-hide" label="×" plain onPress={() => update($, viewA, v => ({ ...v, band: null }))} />
       </Box>
     )
+  })
+
+  // ── the terminal's hint line under the prompt: an unread count ──────
+  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    const snap = await read($, snapA)
+    const n = snap ? unreadOf(snap) : 0
+    return n ? next({ ...e, props: { ...e.props, tail: `· ${n} unread · /yap` } }) : next(e)
   })
 
   // ── the pane ────────────────────────────────────────────────────────
@@ -312,7 +330,7 @@ function inbox($: $, ctx: Ctx, snap: Snap) {
             <Box flexDirection="column" flexGrow={1} flexShrink={1}>
               <Button key={`chat-${c.id}`} plain onPress={() => select($, c.id)}>
                 <Text bold={n > 0}>{c.title}</Text>
-                {c.transport !== 'yap' ? <Text dimColor>  {bridgeName(snap, c.transport)}</Text> : ''}
+                {c.transport !== 'yap' ? <Text color="#FFFFFF" backgroundColor={NET_COLOR[c.transport] ?? '#495057'} bold>{` ${bridgeName(snap, c.transport)} `}</Text> : ''}
                 <Text dimColor>  {last ? time(last.ts) : ''}</Text>
                 {n ? <Text color="claude" bold>  {String(n)}</Text> : ''}
               </Button>
@@ -332,7 +350,8 @@ function conversation($: $, ctx: Ctx, snap: Snap, chat: Chat) {
   const seen = sees(snap, chat)
   const msgs = (snap.messages[chat.id] ?? []).slice(-16)
   const bridge = chat.transport !== 'yap' ? snap.bridges[chat.transport] : undefined
-  const presence = who ? (who.bridge ? `on ${bridgeName(snap, chat.transport)}` : who.status === 'online' ? `in ${who.harness ?? 'yapping'}` : 'away') : `${chat.members.length} people`
+  const net = chat.transport !== 'yap' ? bridgeName(snap, chat.transport) : ''
+  const presence = net ? `on ${net}${who?.handle ? ` · ${who.handle}` : ''}` : who ? (who.status === 'online' ? `in ${who.harness ?? 'yapping'}` : 'away') : `${chat.members.length} people`
 
   return (
     <Box flexDirection="column" gap={ctx.isTerminal ? 0 : 'sm'}>
@@ -341,9 +360,9 @@ function conversation($: $, ctx: Ctx, snap: Snap, chat: Chat) {
         {ctx.hasSvg ? <Svg source={avatar(who ?? { id: chat.id, name: chat.title, color: '#495057' }, 30)} alt={chat.title} width={30} height={30} /> : null}
         <Box flexDirection="column" flexGrow={1} flexShrink={1}>
           <Text bold>{chat.title}</Text>
-          <Text dimColor>{presence}</Text>
+          {net ? <Text color={NET_COLOR[chat.transport]} bold>{presence}</Text> : <Text dimColor>{presence}</Text>}
         </Box>
-        <Button key="sees" plain onPress={() => act($, { t: 'set_sees', chatId: chat.id, on: !seen })}>
+        <Button key="sees" plain onPress={() => act($, 'set_sees', { chat: chat.id, on: !seen })}>
           <Text color={seen ? 'claude' : undefined} dimColor={!seen}>{seen ? '✳ Claude can see this chat' : '○ Hidden from Claude'}</Text>
         </Button>
       </Box>
@@ -354,11 +373,11 @@ function conversation($: $, ctx: Ctx, snap: Snap, chat: Chat) {
 
       {bridge?.note ? (
         <Box flexDirection="row" gap={1}>
-          <Text dimColor>via {bridge.name}. {bridge.note}</Text>
-          <Button key="invite" plain onPress={() => act($, { t: 'invite_p2p', chatId: chat.id })}><Text color="claude">Invite to yapping</Text></Button>
+          <Text dimColor>{bridge.note}</Text>
+          <Button key="invite" plain onPress={() => invite($, ctx.isTerminal ? 'terminal' : 'desktop')}><Text color="claude">Invite to yapping</Text></Button>
         </Box>
       ) : null}
-      {Input ? <Input key={`compose-${chat.id}`} placeholder={`Message ${who?.name ?? chat.title}`} submitLabel="Send" onSubmit={(v: string) => v.trim() && send($, chat.id, v)} /> : null}
+      {Input ? <Input key={`compose-${chat.id}`} placeholder={`Message ${who?.name ?? chat.title}${net ? ` on ${net}` : ''}`} submitLabel="Send" onSubmit={(v: string) => v.trim() && send($, chat.id, v)} /> : null}
     </Box>
   )
 }
@@ -431,8 +450,8 @@ function assistRow($: $, ctx: Ctx, snap: Snap, a: Assist, mine: boolean) {
       {a.state === 'ready' && a.proposal ? (
         <Box flexDirection="row" alignItems="center" gap={1}>
           {a.proposal.detail ? <Text dimColor>{a.proposal.detail}</Text> : null}
-          <Button key={`ok-${a.id}`} label={a.proposal.action} variant="primary" onPress={() => act($, { t: 'approve', chatId: a.chatId, assistId: a.id })} />
-          <Button key={`no-${a.id}`} label="Not now" onPress={() => act($, { t: 'dismiss', chatId: a.chatId, assistId: a.id })} />
+          <Button key={`ok-${a.id}`} label={a.proposal.action} variant="primary" onPress={() => act($, 'approve', { id: a.id })} />
+          <Button key={`no-${a.id}`} label="Not now" onPress={() => act($, 'dismiss', { id: a.id })} />
         </Box>
       ) : null}
       {open ? (
