@@ -149,7 +149,7 @@ function assistHTML(a, c) {
   if (settled) return `<div class="as settled"><button class="cb" data-observe="${a.id}" title="What ${AGENT_NAME()} did">${chibi(AGENT(), { state: 'idle', size: 14 })}</button></div>`
   const map = { reading: 'reading', waiting: 'idle', talking: 'talking', working: 'idle', ready: 'ready', done: 'done', dismissed: 'done' }
   const mine = chibi(a.agents?.[0]?.harness || AGENT(), { state: map[st] || 'idle', size: 30 })
-  const theirs = st === 'talking' && a.agents?.[1] ? chibi(a.agents[1].harness, { state: 'talking', size: 30 }) : ''
+  const theirs = st === 'talking' && a.agents?.[1] ? chibi(a.agents[1].harness, { state: 'talking', size: 30, turn: 1 }) : ''
   const line = st === 'reading' ? `${AGENT_NAME()} is reading` : a.line
   const html = `<div class="as s-${st}">
     <button class="cb ${theirs ? 'pair' : ''}" data-observe="${a.id}" title="What ${AGENT_NAME()} is doing">${mine}${theirs}</button>
@@ -233,7 +233,7 @@ function renderSheet() {
   el.setAttribute('aria-hidden', String(!a))
   if (!a) { el.innerHTML = ''; return }
   const map = { reading: 'reading', waiting: 'idle', talking: 'talking', working: 'idle', ready: 'ready', done: 'done', dismissed: 'done' }
-  const chibis = (a.agents || [{ harness: AGENT() }]).map((g, i) => `<span class="sh-cb">${chibi(g.harness, { state: a.state === 'talking' ? 'talking' : i ? 'idle' : map[a.state], size: 30 })}<small>${i ? esc(peerAgent(a)) : esc(AGENT_NAME())}</small></span>`).join('')
+  const chibis = (a.agents || [{ harness: AGENT() }]).map((g, i) => `<span class="sh-cb">${chibi(g.harness, { state: a.state === 'talking' ? 'talking' : i ? 'idle' : map[a.state], size: 30, turn: i })}<small>${i ? esc(peerAgent(a)) : esc(AGENT_NAME())}</small></span>`).join('')
   const msg = (S.messages[a.chatId] || []).find((m) => m.id === a.msgId)
   const items = [...(a.log || [])]
   const rows = items.map((l) => `<li class="${l.who}"><span class="tl-dot"></span><div><span class="tl-who">${l.who === 'mine' ? esc(AGENT_NAME()) : esc(peerAgent(a) || 'Their agent')}</span><p>${esc(l.text)}</p></div><time>${helpers.time(l.at)}</time></li>`).join('')

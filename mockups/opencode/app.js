@@ -36,7 +36,7 @@ const sees = (c) => helpers.canSee(S, c)
 // In this sidebar the user's own agent is opencode, whatever the sim says.
 const harnessOf = (owner) => (owner === S.me ? HERE : U(owner).agent)
 const agentLabel = (owner) => (owner === S.me ? 'your opencode' : `${U(owner).name}’s ${S.harnesses[U(owner).agent]?.name || 'agent'}`)
-const mark = (owner, state, size = 30) => agentMark(harnessOf(owner), state, { size, badge: owner === S.me ? null : { letter: U(owner).name?.[0] || '?', color: U(owner).color } })
+const mark = (owner, state, size = 30, turn = 0) => agentMark(harnessOf(owner), state, { size, turn, badge: owner === S.me ? null : { letter: U(owner).name?.[0] || '?', color: U(owner).color } })
 const initials = (name) => (name || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
 const fixLine = (t) => String(t || '').replace(/\bClaude\b/g, 'opencode')
 
@@ -215,7 +215,7 @@ function assistHTML(a) {
   const faded = settled && Date.now() - ui.settledAt[a.id] > 6000
   const owners = a.agents.map((x) => x.owner)
   const chibis = st === 'talking'
-    ? owners.map((o) => mark(o, 'talking')).join('')
+    ? owners.map((o, i) => mark(o, 'talking', 30, i)).join('')
     : mark(owners[0], faded ? 'idle' : st === 'dismissed' ? 'done' : st, faded ? 18 : 30)
   if (faded) return `<div class="assist faded" data-observe="${a.id}" title="${esc(fixLine(a.line))}">${chibis}</div>`
   const proposal = st === 'ready' && a.proposal ? `

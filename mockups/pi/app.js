@@ -2,6 +2,7 @@
 // People text people. pi (this harness's agent) only ever shows up as a
 // tiny chibi of its mark, hanging under the message it is dealing with.
 
+import { chibi } from '../../shared/chibi.js'
 import { connect, helpers as H } from '../../shared/yap-client.js'
 
 const P = new URLSearchParams(location.search)
@@ -87,28 +88,14 @@ function smallAv(u) {
   return `<span class="sav"><span style="background:${c}"> </span><span style="background:${c};color:${ink};font-weight:800">${esc(u.name[0])}</span><span style="background:${c}"> </span></span>`
 }
 
-// ── the chibi, drawn in cells ───────────────────────────────────────
-// 3 columns × 2 rows: eyes on top, the harness's mouth below.
-const CHIBI = {
-  pi: { bg: '#5B6CF0', eye: '#ffffff', mouth: 'π', mc: '#ffffff' },
-  opencode: { bg: '#1A1A1A', eye: '#ffffff', mouth: '▬', mc: '#F5A742', ring: true },
-  claude: { bg: '#D97757', eye: '#3D1F12', mouth: '‿', mc: '#3D1F12' },
-  codex: { bg: '#10A37F', eye: '#0B3B2E', mouth: '◡', mc: '#0B3B2E', inner: '#E8F7F1' },
-}
+// ── the chibi ───────────────────────────────────────────────────────
+// The shared flat chibi of each harness mark, drawn as an inline image the
+// way pi's TUI shows pictures in kitty-protocol terminals (Ghostty, kitty).
+const cbState = (state) => (state === 'waiting' || state === 'working' ? 'reading' : state === 'dismissed' ? 'done' : state)
 function cellChibi(harness, state, opts = {}) {
-  const k = CHIBI[harness] || CHIBI.pi
-  const eyes = state === 'done' ? ['^', '^'] : state === 'sleeping' ? ['-', '-'] : ['•', '•']
-  const eyeBg = k.inner || k.bg
-  const anim = RM ? '' : state === 'talking' ? 'talk' : state === 'ready' ? 'hop' : state === 'sleeping' ? '' : 'bob'
-  const scan = state === 'reading' || state === 'working' || state === 'waiting'
-  const extra = state === 'ready' ? '<span class="cx bang">!</span>' : state === 'talking' && !opts.offset ? '<span class="cx talkdots"><i>·</i><i>·</i><i>·</i></span>' : state === 'sleeping' ? '<span class="cx zz">z</span>' : ''
-  const delay = anim ? `style="${phase(anim === 'talk' ? 360 : 1400)}${opts.offset ? `;animation-direction:reverse` : ''}"` : ''
-  return `<span class="cc ${state} ${k.ring ? 'ring' : ''}" ${opts.act ? `data-act="observe" data-id="${opts.act}"` : ''} title="${esc(opts.title || '')}"><span class="cb ${anim}" ${delay}>` +
-    `<span class="cr" style="background:${k.bg}"><span class="eyes ${scan ? 'scan' : ''}" style="background:${eyeBg};color:${k.eye};${scan ? phase(1400) : ''}">${eyes[0]} ${eyes[1]}</span></span>` +
-    `<span class="cr" style="background:${k.bg};color:${k.mc}"><span class="mouth">${k.mouth}</span></span>` +
-    `</span>${extra}</span>`
+  return `<span class="cc ${state}" ${opts.act ? `data-act="observe" data-id="${opts.act}"` : ''} title="${esc(opts.title || '')}">${chibi(harness, { state: cbState(state), size: 26, turn: opts.offset ? 1 : 0 })}</span>`
 }
-const miniChibi = (harness, state = 'idle') => { const k = CHIBI[harness] || CHIBI.pi; return `<span class="mc" style="background:${k.bg};color:${k.inner ? k.mc : k.eye}">${state === 'done' ? '^^' : state === 'sleeping' ? '--' : '••'}</span>` }
+const miniChibi = (harness, state = 'idle') => `<span class="mc">${chibi(harness, { state: cbState(state), size: 14 })}</span>`
 
 // ── servers & channels ──────────────────────────────────────────────
 function chatsIn(sid) {

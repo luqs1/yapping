@@ -447,7 +447,7 @@ body.yap-open .pifull { display: none; }
 
 @media (max-width: 1180px) { .app { grid-template-columns: 7ch 26ch minmax(0, 1fr) 0; } .app .right { display: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .dots i, .livebar .dot, .notes li.new, .rx.pop, .msg.flash, .cc .cb, .cc .eyes, .cx { animation: none !important; }
+  .dots i, .livebar .dot, .notes li.new, .rx.pop, .msg.flash, .cx { animation: none !important; }
   }
 
 /* ── v2: people-only details ───────────────────────────────────── */
@@ -488,21 +488,10 @@ body.yap-open .pifull { display: none; }
 .quiet button:hover { text-decoration: underline; }
 
 /* the chibi: 3 cells × 2 rows of pi's mark */
-.cc { position: relative; display: inline-flex; flex: none; width: 3ch; height: calc(var(--lh) * 2); cursor: pointer; vertical-align: top; }
-.cc .cb { display: flex; flex-direction: column; width: 3ch; transform-origin: 50% 100%; }
-.cc .cr { display: flex; justify-content: center; width: 3ch; height: var(--lh); line-height: var(--lh); overflow: hidden; }
-.cc .cr:first-child { clip-path: polygon(.5ch 0, calc(100% - .5ch) 0, 100% 35%, 100% 100%, 0 100%, 0 35%); }
-.cc .cr:last-child { clip-path: polygon(0 0, 100% 0, 100% 65%, calc(100% - .5ch) 100%, .5ch 100%, 0 65%); }
-.cc.ring .cb { filter: drop-shadow(0 0 1px #8a8c94); }
-.cc .eyes { display: inline-block; font-weight: 800; font-size: 15px; padding: 0 .25ch; white-space: pre; letter-spacing: -.05em; }
-.cc .eyes.scan { animation: scan 1.4s steps(4) infinite; }
-.cc .mouth { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 14px; }
-.cc .cb.bob { animation: bob 1.4s steps(2) infinite; }
-.cc .cb.talk { animation: talk .36s steps(2) infinite; }
-.cc .cb.hop { animation: chop 1.1s steps(1) infinite; }
-.cc.sleeping { opacity: .45; cursor: default; }
-.cc.ready { margin-right: 1.5ch; }
-.cc.done .cr { filter: saturate(.8); }
+.cc { position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: 4ch; height: calc(var(--lh) * 2); cursor: pointer; vertical-align: top; }
+.cc svg { display: block; }
+.cc.sleeping { cursor: default; }
+.cc.ready { margin-right: .5ch; }
 .cx { position: absolute; left: 3ch; top: -2px; font-weight: 800; font-size: 12px; line-height: 1; }
 .cx.bang { background: #f0c674; color: #1b1c1f; padding: 1px .4ch; }
 .cx.talkdots { color: var(--muted); letter-spacing: -.1em; top: -9px; left: 2.5ch; }
@@ -513,7 +502,7 @@ body.yap-open .pifull { display: none; }
 @keyframes bob { 50% { transform: translateY(-2px); } }
 @keyframes talk { 0% { transform: rotate(-6deg); } 50% { transform: rotate(6deg) translateY(-1px); } }
 @keyframes chop { 0%, 55% { transform: translateY(0); } 15% { transform: translateY(calc(var(--lh) * -.35)); } 30% { transform: translateY(0) scaleY(.92); } }
-.mc { display: inline-block; width: 2ch; text-align: center; font-size: 10px; font-weight: 800; line-height: 13px; vertical-align: 1px; }
+.mc { display: inline-flex; width: 2ch; justify-content: center; vertical-align: -2px; }
 
 /* the assist row under a message */
 .assist { display: flex; gap: 1ch; align-items: flex-start; margin-top: calc(var(--lh) * .25); min-height: calc(var(--lh) * 2); padding-right: 1ch; }

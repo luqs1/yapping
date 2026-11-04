@@ -85,7 +85,7 @@ function attachPreview(a) {
 
 // ------------------------------------------------------------------ assists → chibis
 const CB_STATE = { reading: 'reading', waiting: 'idle', talking: 'talking', working: 'reading', ready: 'ready', done: 'done', dismissed: 'done' }
-function cb(harness, state, size) { return `<span class="cb">${chibi(harness, { state, size })}</span>` }
+function cb(harness, state, size, turn = 0) { return `<span class="cb">${chibi(harness, { state, size, turn })}</span>` }
 function assistPhase(a) {
   if (!['done', 'dismissed'].includes(a.state)) return 'live'
   const t = ui.doneAt[a.id]
@@ -426,7 +426,7 @@ function renderAssist(chat, m, a) {
   const agents = a.agents?.length ? a.agents : [{ harness: myHarness() }]
   const st = CB_STATE[a.state] || 'idle'
   if (phase === 'idle') return `<div class="assist ${s} idle"><button class="cbbtn" data-act="observe" data-aid="${a.id}" aria-label="What ${esc(AG())} did">${cb(agents[0].harness, 'idle', 16)}</button></div>`
-  const pair = agents.slice(0, a.state === 'talking' ? 2 : 1).map((g, i) => cb(g.harness, st, 26)).join('')
+  const pair = agents.slice(0, a.state === 'talking' ? 2 : 1).map((g, i) => cb(g.harness, st, 26, i)).join('')
   const chip = `<button class="cbbtn ${a.state === 'talking' ? 'pair' : ''}" data-act="observe" data-aid="${a.id}" aria-label="What ${esc(AG())} is doing">${pair}</button>`
   if (a.state === 'ready' && a.proposal) {
     return `<div class="assist ${s} ready">${chip}<div class="proposal" data-aid="${a.id}">
@@ -562,7 +562,7 @@ function renderIsland() {
   const agents = a.agents?.length ? a.agents : [{ harness: myHarness() }]
   const st = CB_STATE[a.state]
   isl.classList.add('live'); isl.dataset.aid = a.id
-  setHTML(isl, `<span class="isl-l">${agents.slice(0, a.state === 'talking' ? 2 : 1).map((g) => chibi(g.harness, { state: st, size: 22 })).join('')}</span><span class="isl-t ${a.state}">${esc(ISLAND[a.state] ? ISLAND[a.state](a) : a.state)}</span>`)
+  setHTML(isl, `<span class="isl-l">${agents.slice(0, a.state === 'talking' ? 2 : 1).map((g, i) => chibi(g.harness, { state: st, size: 22, turn: i })).join('')}</span><span class="isl-t ${a.state}">${esc(ISLAND[a.state] ? ISLAND[a.state](a) : a.state)}</span>`)
 }
 $('#island').addEventListener('click', () => {
   const aid = $('#island').dataset.aid; const a = S.assists[aid]; if (!a) return

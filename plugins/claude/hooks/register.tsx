@@ -82,14 +82,28 @@ async function poll($: $) {
   }
 }
 
+// A press while the relay is down says so instead of throwing.
+async function offlineNotice($: $) {
+  await update($, liveA, () => false)
+  $.ui.toast("Chats are offline, so that didn't go through")
+}
+
 async function send($: $, chatId: string, text: string) {
-  await fetchJSON($, '/api/action', { t: 'send', chatId, text, client: 'claude' })
-  await refresh($)
+  try {
+    await fetchJSON($, '/api/action', { t: 'send', chatId, text, client: 'claude' })
+    await refresh($)
+  } catch {
+    await offlineNotice($)
+  }
 }
 
 async function act($: $, action: Record<string, unknown>) {
-  await fetchJSON($, '/api/action', { ...action, client: 'claude' })
-  await refresh($)
+  try {
+    await fetchJSON($, '/api/action', { ...action, client: 'claude' })
+    await refresh($)
+  } catch {
+    await offlineNotice($)
+  }
 }
 
 async function select($: $, chatId: string | null) {
@@ -400,8 +414,8 @@ function assistRow($: $, ctx: Ctx, snap: Snap, a: Assist, mine: boolean) {
   const peerName = peer ? `${snap.users[peer.owner]?.name}'s ${peer.harness}` : ''
   const marks = ctx.hasSvg ? (
     <Box flexDirection="row">
-      <Svg source={chibi(a.agents[0]?.harness ?? 'claude', { state, size: 26 })} alt={`Claude ${a.state}`} width={26} height={29} isInteractive />
-      {a.state === 'talking' && peer ? <Svg source={chibi(peer.harness, { state: 'talking', size: 26 })} alt={peerName} width={26} height={29} isInteractive /> : null}
+      <Svg source={chibi(a.agents[0]?.harness ?? 'claude', { state, size: 26 })} alt={`Claude ${a.state}`} width={26} height={26} isInteractive />
+      {a.state === 'talking' && peer ? <Svg source={chibi(peer.harness, { state: 'talking', size: 26, turn: 1 })} alt={peerName} width={26} height={26} isInteractive /> : null}
     </Box>
   ) : (
     <Text color="claude">{glyph(a.state, ctx.tick)}{a.state === 'talking' && peer ? ` ${peer.harness === 'opencode' ? '◧' : peer.harness === 'pi' ? 'π' : '◎'}${['°o°', ' °o°'][ctx.tick % 2]}` : ''}</Text>
