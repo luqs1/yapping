@@ -18,7 +18,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { BRIDGES, HARNESSES } from '../../shared/sim.js'
-import { createBridges, NETWORKS, notSetUp } from './bridges'
+import { createBridges, NETWORKS, notSetUp, WHATSAPP_WARNING, type BridgedMessage, type BridgedPerson, type BridgeOptions, type BridgeStatus } from './bridges'
 import { createConnection, type Frame } from './conn'
 import { loadKeys, open as openEnv, publicKeys, seal, signEvent, verifyEvent, type Envelope } from './crypto'
 import { loadConfig, saveConfig, type Config, type User } from './paths'
@@ -57,6 +57,9 @@ export type NodeOpts = {
   log?: (...a: unknown[]) => void
   readingMs?: number // how long a `reading` glance lasts before it settles
   deviceTtlMs?: number // how long a contact's device list is trusted
+  // How bridges run. `whatsapp: false` turns the WhatsApp bridge off; tests
+  // pass a fake sidecar command here.
+  bridges?: Omit<BridgeOptions, 'home' | 'log'>
 }
 
 // DM ids are stable on both ends: dm:<sorted user ids joined by ','>.
@@ -76,7 +79,7 @@ export async function startNode(opts: NodeOpts) {
   const deviceTtl = opts.deviceTtlMs ?? 5 * 60_000
   const keys = loadKeys(home)
   const store = openStore(home)
-  const bridges = createBridges()
+  const bridges = createBridges({ home, log, ...(opts.bridges || {}) })
   const listeners = new Set<(ev: Json) => void>()
   const timers = new Set<ReturnType<typeof setTimeout>>()
   let cfg: Config = loadConfig(home)
@@ -251,6 +254,12 @@ export async function startNode(opts: NodeOpts) {
       }
     }
     if (!other) throw new RpcError('no_chat', `No chat or contact called "${key}".`)
+    if (other.bridge) {
+      // Someone on WhatsApp: their chat, never a yapping DM.
+      const bridged = store.chat(other.id)
+      if (bridged) return bridged
+      throw new RpcError('no_chat', `You haven't talked to ${other.name || other.id} on ${(BRIDGES as Json)[other.bridge]?.name || other.bridge} yet.`)
+    }
     const id = dmId(myId, other.id)
     const existing = store.chat(id)
     if (existing) return existing
@@ -465,8 +474,146 @@ export async function startNode(opts: NodeOpts) {
   function bridgesState() {
     const out: Json = {}
     for (const [k, v] of Object.entries(BRIDGES)) out[k] = { ...v }
-    for (const n of NETWORKS) out[n] = { ...(out[n] || { name: n }), status: 'unlinked' }
+    for (const n of NETWORKS) {
+      const b = bridges.get(n)
+      const cur = b?.current?.()
+      out[n] = { ...(out[n] || { name: n }), status: 'unlinked', ...(cur ? publicStatus(cur) : {}) }
+    }
     return out
+  }
+
+  // A bridge status as the UI keeps it under bridges[network]. `account` is
+  // always present (null when unlinked) so an unlink clears it in the UI.
+  function publicStatus(s: BridgeStatus): Json {
+    const { network, ...rest } = s
+    return { ...rest, account: s.account ?? null, accountName: s.accountName ?? null }
+  }
+
+  const bridgeColor = '#25D366'
+
+  // Someone on another network, as a user row: {id:'wa:<jid>', name, handle, bridge}.
+  function upsertBridgedUser(p: BridgedPerson, network: string) {
+    const prev = store.user(p.id)
+    const name = p.name || prev?.name || p.handle || 'Someone'
+    const handle = p.handle || prev?.handle || ''
+    // Keep a real name over a phone-number fallback.
+    const keepName = prev?.name && /^\+?\d[\d ]*$/.test(name) && !/^\+?\d[\d ]*$/.test(prev.name)
+    const next = { id: p.id, name: keepName ? prev!.name : name, handle, email: undefined, avatar: null, color: prev?.color || colorFor(p.id) || bridgeColor, agent: null, harness: null, status: 'bridged', bridge: network, clients: [] }
+    if (prev && prev.name === next.name && prev.handle === next.handle && prev.bridge === network) return prev
+    store.putUser(next)
+    emit({ type: 'user', user: next })
+    return next
+  }
+
+  const genericTitle = (t: string) => !t || /^\+?\d[\d ]*$/.test(t) || t === 'WhatsApp group' || t === 'WhatsApp contact' || t === 'WhatsApp'
+
+  // History imports don't count as unread. The UI bumps unread for every
+  // `message` event, so once a burst of history settles each touched chat
+  // gets a chat_update carrying the real count.
+  const settle = new Set<string>()
+  let settleTimer = false
+  function settleLater(chatId: string) {
+    settle.add(chatId)
+    if (settleTimer) return
+    settleTimer = true
+    later(() => {
+      settleTimer = false
+      for (const id of settle) {
+        const c = store.chat(id)
+        if (c) saveChat(c)
+      }
+      settle.clear()
+    }, 150)
+  }
+
+  // Something arrived from a bridge: people, the chat, the message. These
+  // stay on this Mac; nothing here goes through our server.
+  function ingestBridged(m: BridgedMessage) {
+    const myId = me()
+    if (!myId) return log(`${m.network}: dropped a message: not signed in yet`)
+    const people = [...m.chat.members, ...(m.sender ? [m.sender] : [])]
+    for (const p of people) upsertBridgedUser(p, m.network)
+    let chat = store.chat(m.chat.id)
+    const ids = [...new Set(people.map((p) => p.id))]
+    if (!chat) {
+      chat = {
+        id: m.chat.id,
+        kind: m.chat.kind,
+        title: m.chat.title,
+        transport: m.network,
+        members: [myId, ...ids],
+        pinned: false,
+        unread: { [myId]: 0 },
+        // Bridged chats start hidden from the agent, like every chat.
+        sees: { [myId]: false },
+      }
+      saveChat(chat, m.ts)
+    } else {
+      const title = m.chat.title && m.chat.title !== chat.title && !(genericTitle(m.chat.title) && !genericTitle(chat.title)) ? m.chat.title : chat.title
+      const newcomers = ids.filter((id) => !chat!.members.includes(id))
+      if (title !== chat.title || newcomers.length) {
+        chat = { ...chat, title, members: [...chat.members, ...newcomers] }
+        saveChat(chat)
+      }
+    }
+    if (store.message(m.id)) return // seen it
+    const from = m.fromMe ? myId : m.from
+    const msg: Json = {
+      id: m.id,
+      chatId: chat.id,
+      from,
+      kind: m.attachment ? 'attachment' : 'text',
+      text: m.text || '',
+      ts: m.ts,
+      via: m.network,
+      reactions: {},
+      ...(m.replyTo ? { replyTo: m.replyTo } : {}),
+      ...(m.attachment ? { attachment: m.attachment } : {}),
+    }
+    store.putMessage(msg)
+    if (from !== myId && !m.history) chat.unread = { ...chat.unread, [myId]: (chat.unread?.[myId] || 0) + 1 }
+    saveChat(chat, m.ts, false)
+    emit({ type: 'message', chatId: chat.id, message: msg })
+    if (m.history && from !== myId) settleLater(chat.id)
+  }
+
+  // Our own words into a bridged chat: out through the bridge, then kept
+  // here. Never fanned out over our network.
+  async function sendBridged(chat: Json, text: string, extra: { replyTo?: string; assistedBy?: string; attachment?: Json } = {}) {
+    const b = bridges.get(chat.transport)
+    if (!b) throw new RpcError('not_set_up', notSetUp(chat.transport).message)
+    let sent: { id: string; ts: number }
+    try {
+      sent = await b.send(chat.id, text, { replyTo: extra.replyTo })
+    } catch (e) {
+      throw new RpcError((e as RpcError).code || 'bridge_failed', (e as Error).message)
+    }
+    // Keep our words after whatever came just before, even within one ms.
+    const prevTs = store.messages(chat.id, 1)[0]?.ts ?? 0
+    const msg: Json = {
+      id: sent.id,
+      chatId: chat.id,
+      from: needMe(),
+      kind: 'text',
+      text,
+      ts: Math.max(sent.ts, prevTs + 1),
+      via: chat.transport,
+      reactions: {},
+      ...(extra.replyTo ? { replyTo: extra.replyTo } : {}),
+      ...(extra.assistedBy ? { assistedBy: extra.assistedBy } : {}),
+    }
+    if (!store.message(msg.id)) {
+      store.putMessage(msg)
+      saveChat(chat, msg.ts, false)
+      emit({ type: 'message', chatId: chat.id, message: msg })
+    }
+    return msg
+  }
+
+  for (const [network, b] of bridges) {
+    b.onMessage((m) => { try { ingestBridged(m) } catch (e) { log(`${network}: ingest failed:`, (e as Error).message) } })
+    b.onStatus?.((s) => emit({ type: 'bridge', network, ...publicStatus(s) }))
+    b.start?.()
   }
 
   // ── RPC methods ───────────────────────────────────────────────────────
@@ -566,9 +713,9 @@ export async function startNode(opts: NodeOpts) {
       const text = String(p.text ?? '').slice(0, 4000)
       if (!text.trim()) throw new RpcError('bad_request', 'Nothing to send.')
       if (chat.transport !== 'yap') {
-        const b = bridges.get(chat.transport)
-        if (!b) throw new RpcError('not_set_up', notSetUp(chat.transport).message)
-        await b.send(chat.id, text, { replyTo: p.replyTo })
+        const message = await sendBridged(chat, text, { replyTo: p.replyTo ? String(p.replyTo) : undefined })
+        markRead(chat, false)
+        return { ok: true, message }
       }
       const ev = originate(chat, { kind: 'message', text, ...(p.replyTo ? { replyTo: String(p.replyTo) } : {}) })
       markRead(chat, false)
@@ -592,7 +739,7 @@ export async function startNode(opts: NodeOpts) {
     },
 
     // The owner said yes: the payload goes out as their message.
-    approve(p) {
+    async approve(p) {
       const myId = needMe()
       const a = store.assist(String(p.id ?? p.assistId ?? ''))
       if (!a || a.owner !== myId || a.state !== 'ready') throw new RpcError('not_ready', 'Nothing to approve there.')
@@ -603,7 +750,13 @@ export async function startNode(opts: NodeOpts) {
         pl.kind === 'text'
           ? { text: String(pl.text) }
           : { text: '', attachment: { type: pl.kind, title: String(pl.title), ...(pl.subtitle ? { subtitle: String(pl.subtitle) } : {}), ...(pl.url ? { url: String(pl.url) } : {}), ...(pl.when ? { when: pl.when } : {}) } }
-      if (chat.transport !== 'yap' && !bridges.get(chat.transport)) throw new RpcError('not_set_up', notSetUp(chat.transport).message)
+      if (chat.transport !== 'yap') {
+        // Bridges carry text: a link or an invite goes as its words.
+        const text = pl.kind === 'text' ? String(pl.text) : [pl.title, pl.subtitle, pl.url].filter(Boolean).map(String).join('\n')
+        const message = await sendBridged(chat, text, { assistedBy: a.agents?.[0]?.harness || agent() })
+        putAssist({ ...a, state: 'done', line: 'Sent', proposal: undefined, sentMsgId: message.id })
+        return { ok: true, message }
+      }
       const ev = originate(chat, { kind: 'message', ...body, assistedBy: a.agents?.[0]?.harness || agent() })
       putAssist({ ...a, state: 'done', line: 'Sent', proposal: undefined, sentMsgId: ev.id })
       return { ok: true, message: store.message(ev.id) }
@@ -632,6 +785,7 @@ export async function startNode(opts: NodeOpts) {
       if (!m || m.chatId !== chat.id) throw new RpcError('bad_request', 'No such message in that chat.')
       const emoji = String(p.emoji || '')
       if (!emoji) throw new RpcError('bad_request', 'Which emoji?')
+      if (chat.transport !== 'yap') throw new RpcError('not_supported', `Reactions don't go through to ${(BRIDGES as Json)[chat.transport]?.name || chat.transport} yet.`)
       const off = (m.reactions[emoji] || []).includes(myId)
       originate(chat, { kind: 'reaction', msgId: m.id, emoji, ...(off ? { off: true } : {}) })
       return { ok: true, on: !off }
@@ -679,9 +833,21 @@ export async function startNode(opts: NodeOpts) {
         if (op === 'status') return { network, status: 'unlinked', ...notSetUp(network) }
         throw new RpcError('not_set_up', notSetUp(network).message)
       }
-      if (op === 'status') return b.status()
-      if (op === 'link') return b.link()
-      if (op === 'unlink') return b.unlink().then(() => ({ ok: true }))
+      try {
+        if (op === 'status') return publicStatusWithNetwork(await b.status())
+        if (op === 'link') {
+          const r = await b.link()
+          // The first time, and every time until it's linked: say what it risks.
+          return { network, ...r, ...(r.status !== 'linked' && network === 'whatsapp' ? { warning: WHATSAPP_WARNING } : {}) }
+        }
+        if (op === 'unlink') {
+          await b.unlink()
+          return { ok: true, network, status: 'unlinked' }
+        }
+      } catch (e) {
+        if (e instanceof RpcError) throw e
+        throw new RpcError((e as RpcError).code || 'bridge_failed', (e as Error).message)
+      }
       throw new RpcError('bad_request', 'op must be status, link or unlink.')
     },
 
@@ -689,6 +855,10 @@ export async function startNode(opts: NodeOpts) {
     status() {
       return { version: VERSION, signedIn: !!me(), user: cfg.user ?? null, deviceId: cfg.deviceId ?? null, server: cfg.server, connected: conn.connected, seq: store.seq(), outbox: store.outbox().length }
     },
+  }
+
+  function publicStatusWithNetwork(s: BridgeStatus) {
+    return { network: s.network, ...publicStatus(s) }
   }
 
   function markRead(chat: Json, tell: boolean) {
@@ -721,6 +891,7 @@ export async function startNode(opts: NodeOpts) {
     methods: Object.keys(methods),
     store,
     keys,
+    bridges,
     get config() { return cfg },
     get connected() { return conn.connected },
     // Re-read config.json (after `yap login`) and reconnect.
@@ -730,6 +901,7 @@ export async function startNode(opts: NodeOpts) {
     async stop() {
       stopped = true
       conn.stop()
+      await Promise.all([...bridges.values()].map((b) => b.stop?.().catch(() => {})))
       for (const t of timers) clearTimeout(t)
       await queue.catch(() => {})
       store.close()

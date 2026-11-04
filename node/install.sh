@@ -33,6 +33,16 @@ mv -f "$BIN/yap.download" "$BIN/yap"
 # Downloaded binaries carry a quarantine flag; this one came from us.
 xattr -d com.apple.quarantine "$BIN/yap" 2>/dev/null || true
 
+# The WhatsApp bridge sidecar, beside yap. Optional: it only runs if you
+# link WhatsApp from the sidebar, and yapping works without it.
+if curl -fsSL "$BASE/dl/yap-wa-darwin-$ARCH" -o "$BIN/yap-wa.download" 2>/dev/null; then
+  chmod +x "$BIN/yap-wa.download"
+  mv -f "$BIN/yap-wa.download" "$BIN/yap-wa"
+  xattr -d com.apple.quarantine "$BIN/yap-wa" 2>/dev/null || true
+else
+  rm -f "$BIN/yap-wa.download"
+fi
+
 # Put yap on PATH for new terminals (zsh is the Mac default; bash too if used).
 LINE='export PATH="$HOME/.yapping/bin:$PATH"'
 [ "$DIR" = "$HOME/.yapping" ] || LINE="export PATH=\"$BIN:\$PATH\""
