@@ -24,7 +24,7 @@ function relay(on: any) {
     const result = req.method === 'state' ? SNAP : req.method === 'sync' ? { seq: SNAP.seq, events: [] } : req.method === 'invite' ? { url: 'https://yap.luqmaan.dev/i/abc' } : { ok: true }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ result }) } }
   })
-  on('fs.read', () => ({ value: 'local-token-for-tests' }))
+  on('fs.read', (_: unknown, e: any) => ({ value: String(e.path ?? e).endsWith('api.json') ? '{"port":7791}' : 'local-token-for-tests' }))
   on('env.get', () => ({ value: '/Users/test' }))
   on('ui.copy', () => ({ value: { isCopied: true } }))
   on('command.register', () => ({ value: { command: 'yap' } }))

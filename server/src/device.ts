@@ -85,7 +85,7 @@ export function linkPage(ctx: Ctx, req: Request) {
       <input type="text" name="code" placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters" required aria-label="Code">
       <button type="submit">Continue</button></form>`)
   const row = pendingByUserCode(ctx, code)
-  if (!row) return page('Code expired', `<h1>That code has expired</h1><p>Run <b>yap login</b> on your Mac again to get a new one.</p>`, { status: 410 })
+  if (!row) return page('Code expired', `<h1>That code has expired</h1><p>Go back to Claude and try again; it will open a fresh link.</p>`, { status: 410 })
   return page('Link your Mac', `
     <h1>Link “${esc(row.name)}” to yapping?</h1>
     <p>Check that your Mac shows this code:</p>
@@ -104,7 +104,7 @@ export async function linkDecide(ctx: Ctx, req: Request) {
   if (crossSite(req, ctx.cfg.origin)) return err(403, 'bad_origin')
   const b = await body(req)
   const row = pendingByUserCode(ctx, String(b.code || ''))
-  if (!row) return page('Code expired', `<h1>That code has expired</h1><p>Run <b>yap login</b> on your Mac again to get a new one.</p>`, { status: 410 })
+  if (!row) return page('Code expired', `<h1>That code has expired</h1><p>Go back to Claude and try again; it will open a fresh link.</p>`, { status: 410 })
   const approve = b.decision === 'approve'
   ctx.db.query('UPDATE device_codes SET status = ?, user_id = ? WHERE device_code_hash = ?').run(approve ? 'approved' : 'denied', user.id, row.device_code_hash)
   if (!approve) return page('Cancelled', `<h1>Not linked</h1><p>“${esc(row.name)}” wasn't linked. You can close this tab.</p>`)

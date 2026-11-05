@@ -170,7 +170,7 @@ export function invitePagePost(ctx: Ctx, req: Request, code: string) {
     <h1>You and ${esc(r.inviter!.name)} are connected</h1>
     ${linked
       ? `<p>${esc(r.inviter!.name.split(' ')[0])} is in your yapping contacts now.</p>`
-      : `<p>One more step: put yapping on your Mac. Open Terminal and paste this:</p><pre>curl -fsSL ${esc(ctx.cfg.origin)}/install.sh | sh</pre>`}
+      : `<p>One more step: add yapping to Claude on your Mac.</p><a class="btn" href="/dl/yapping.mcpb" download>Add to Claude</a>`}
     <a class="btn secondary" href="/account" style="margin-top:24px">Your account</a>`)
 }
 

@@ -1,6 +1,7 @@
 // The routes, wired into one Bun.serve. index.ts starts it for real; the
 // tests start it on a random port.
 
+import { privacyPage } from './privacy'
 import { sessionUser } from './users'
 import { homePage } from './home'
 import { existsSync, statSync } from 'node:fs'
@@ -85,6 +86,7 @@ export function startServer(env: Record<string, string | undefined> = process.en
       // Static.
       '/healthz': () => json({ ok: true, version: '0.1.0' }),
       '/install.sh': () => file(join(cfg.publicDir, 'install.sh'), 'text/x-shellscript; charset=utf-8'),
+      '/privacy': () => privacyPage(),
       '/dl/*': (req) => download(cfg, new URL(req.url).pathname.slice('/dl/'.length)),
     },
     fetch: () => message('Not found', 'There\'s nothing here.', 404),
@@ -132,6 +134,8 @@ function download(cfg: Config, rel: string) {
     headers: {
       'content-type': path.endsWith('.sh') ? 'text/x-shellscript' : path.endsWith('.json') ? 'application/json' : 'application/octet-stream',
       'cache-control': 'public, max-age=300',
+      // The Claude bundle downloads as a file, so opening it hands it to Claude.
+      ...(path.endsWith('.mcpb') ? { 'content-disposition': 'attachment; filename="yapping.mcpb"' } : {}),
     },
   })
 }

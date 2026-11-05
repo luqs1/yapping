@@ -130,7 +130,7 @@ export function accountPage(ctx: Ctx, req: Request) {
   const macs = devices.length
     ? devices.map((d) => `<div class="row"><div>${esc(d.name)}<div class="muted">${ctx.hub.isConnected(d.deviceId) ? 'Online now' : d.lastSeen ? `Last seen ${new Date(d.lastSeen).toUTCString().slice(5, 22)} UTC` : 'Never connected'}</div></div>
         <form method="post" action="/account/devices/${esc(d.deviceId)}/remove"><button class="link" type="submit">Remove</button></form></div>`).join('')
-    : `<p class="muted" style="margin:0">No Macs yet. Open Terminal and paste:</p><pre>curl -fsSL ${esc(ctx.cfg.origin)}/install.sh | sh</pre>`
+    : `<p class="muted" style="margin:0 0 12px">No Macs yet.</p><a class="btn" href="/dl/yapping.mcpb" download>Add to Claude</a>`
   const manage = ctx.cfg.clerk
     ? `<h1 style="font-size:18px">Signing in</h1>
     <p>Your email, phone, passkeys and connected accounts.</p>

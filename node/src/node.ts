@@ -21,6 +21,7 @@ import { BRIDGES, HARNESSES } from '../../shared/sim.js'
 import { createBridges, NETWORKS, notSetUp, WHATSAPP_WARNING, type BridgedMessage, type BridgedPerson, type BridgeOptions, type BridgeStatus } from './bridges'
 import { createConnection, type Frame } from './conn'
 import { loadKeys, open as openEnv, publicKeys, seal, signEvent, verifyEvent, type Envelope } from './crypto'
+import { beginLogin, openInBrowser, type PendingLogin } from './login'
 import { loadConfig, saveConfig, type Config, type User } from './paths'
 import { serverApi, type ServerDevice } from './server-api'
 import { openStore, type Device, type Json } from './store'
@@ -29,7 +30,7 @@ export const VERSION = '0.1.0'
 
 // An RPC failure with a code the UI and MCP can show as-is.
 export class RpcError extends Error {
-  constructor(public code: string, message: string) {
+  constructor(public code: string, message: string, public data?: Json) {
     super(message)
   }
 }
@@ -60,6 +61,8 @@ export type NodeOpts = {
   // How bridges run. `whatsapp: false` turns the WhatsApp bridge off; tests
   // pass a fake sidecar command here.
   bridges?: Omit<BridgeOptions, 'home' | 'log'>
+  openUrl?: (url: string) => void // how sign-in links get opened (default: the browser)
+  loginPollMs?: number // tests poll faster
 }
 
 // DM ids are stable on both ends: dm:<sorted user ids joined by ','>.
@@ -68,6 +71,9 @@ export const dmId = (a: string, b: string) => `dm:${[a, b].sort().join(',')}`
 // People get a steady colour from their id, like the mockups.
 const PALETTE = ['#E8590C', '#1C7ED6', '#2F9E44', '#AE3EC9', '#0B7285', '#C2255C', '#5F3DC4', '#E67700', '#087F5B', '#364FC7']
 const colorFor = (id: string) => PALETTE[[...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length]
+
+// What works before this Mac is linked to an account.
+const SIGNED_OUT_OK = new Set(['sign_in', 'status'])
 
 const ACTIVE = ['reading', 'waiting', 'talking', 'working', 'ready']
 const PAYLOAD_KINDS = ['text', 'link', 'file', 'event']
@@ -89,7 +95,7 @@ export async function startNode(opts: NodeOpts) {
   const me = () => cfg.user?.id
   const needMe = () => {
     const id = me()
-    if (!id) throw new RpcError('not_signed_in', 'This node is not signed in yet. Run `yap login`.')
+    if (!id) throw new RpcError('not_signed_in', 'Not signed in to yapping yet.')
     return id
   }
   const api = () => serverApi(cfg.server, cfg.deviceToken)
@@ -616,6 +622,55 @@ export async function startNode(opts: NodeOpts) {
     b.start?.()
   }
 
+  // ── Signing in (first run) ────────────────────────────────────────────
+  // With nobody at a terminal, the node signs itself in: it asks the server
+  // for a link, the person opens it, signs in and clicks "Link this Mac",
+  // and the node notices and connects. One link at a time.
+  let pending: PendingLogin | null = null
+  let starting: Promise<PendingLogin> | null = null
+
+  async function signInLink(): Promise<PendingLogin> {
+    if (pending && pending.expiresAt > Date.now() + 30_000) return pending
+    if (starting) return starting
+    starting = beginLogin({ home, intervalMs: opts.loginPollMs })
+      .then((p) => {
+        pending = p
+        p.done.then(
+          (next) => {
+            if (pending === p) pending = null
+            if (stopped) return
+            log(`signed in as ${next.user?.name}`)
+            reload()
+          },
+          (e) => {
+            if (pending === p) pending = null
+            log('sign-in:', (e as Error).message)
+          },
+        )
+        return p
+      })
+      .finally(() => { starting = null })
+    return starting
+  }
+
+  // Auto-open at most every 12 hours, so an ignored link doesn't nag.
+  function mayAutoOpen() {
+    const last = Number(store.get('signin_opened_at') || 0)
+    return Date.now() - last > 12 * 3600_000
+  }
+
+  async function notSignedIn(): Promise<never> {
+    const p = await signInLink().catch(() => null)
+    if (!p) throw new RpcError('not_signed_in', "Not signed in to yapping yet, and the yapping server can't be reached right now. Check your internet connection.")
+    throw new RpcError('not_signed_in', `Not signed in yet — open ${p.verifyUrl} to link this Mac to yapping.`, { url: p.verifyUrl, userCode: p.userCode })
+  }
+
+  function reload() {
+    cfg = loadConfig(home)
+    ensureMe()
+    conn.kick()
+  }
+
   // ── RPC methods ───────────────────────────────────────────────────────
   const methods: Record<string, (p: Json) => unknown> = {
     // Everything the sidebar needs to draw itself (sim.js snapshot shape).
@@ -852,6 +907,22 @@ export async function startNode(opts: NodeOpts) {
     },
 
     // For `yap status`.
+    // Signed in? If not, the link to do it. `open` opens it in the browser;
+    // `auto` (from `yap mcp` at start-up) opens it only if we haven't lately.
+    async sign_in(p) {
+      if (me()) return { signedIn: true, user: cfg.user }
+      const link = await signInLink().catch((e) => {
+        throw new RpcError('offline', `Couldn't reach yapping to start signing in: ${(e as Error).message}`)
+      })
+      let opened = false
+      if (p.open || (p.auto && mayAutoOpen())) {
+        ;(opts.openUrl || openInBrowser)(link.verifyUrl)
+        store.set('signin_opened_at', String(Date.now()))
+        opened = true
+      }
+      return { signedIn: false, url: link.verifyUrl, userCode: link.userCode, expiresAt: link.expiresAt, opened, message: `Open ${link.verifyUrl}, sign in, and click "Link this Mac".` }
+    },
+
     status() {
       return { version: VERSION, signedIn: !!me(), user: cfg.user ?? null, deviceId: cfg.deviceId ?? null, server: cfg.server, connected: conn.connected, seq: store.seq(), outbox: store.outbox().length }
     },
@@ -880,6 +951,7 @@ export async function startNode(opts: NodeOpts) {
     const name = String(method || '').replace(/^yap_/, '')
     const fn = Object.hasOwn(methods, name) ? methods[name] : undefined
     if (!fn) throw new RpcError('unknown_method', `Unknown method "${method}".`)
+    if (!me() && !SIGNED_OUT_OK.has(name)) await notSignedIn()
     return await fn(params || {})
   }
 
@@ -895,11 +967,12 @@ export async function startNode(opts: NodeOpts) {
     get config() { return cfg },
     get connected() { return conn.connected },
     // Re-read config.json (after `yap login`) and reconnect.
-    reload() { cfg = loadConfig(home); ensureMe(); conn.kick() },
+    reload,
     flush,
     subscribe(fn: (ev: Json) => void) { listeners.add(fn); return () => listeners.delete(fn) },
     async stop() {
       stopped = true
+      pending?.cancel()
       conn.stop()
       await Promise.all([...bridges.values()].map((b) => b.stop?.().catch(() => {})))
       for (const t of timers) clearTimeout(t)

@@ -69,7 +69,7 @@ Locally the methods are `POST http://127.0.0.1:7790/rpc {method, params}` and `G
 **UI data shapes** match `shared/sim.js` (chats with `transport`, messages, assists with `state/line/proposal/log`, `sees`) so the mockups' rendering carries over. Bridged chats carry `transport:'whatsapp'|'slack'` and the UI labels them unmistakably.
 
 ## Ports and paths
-- node local API: `127.0.0.1:7790`
+- node local API: `127.0.0.1:7790`, or the next free port when something else holds it; the node writes the port it took to `~/.yapping/api.json`, and `/health` answers `{app:'yapping', …}` so clients don't mistake another program for it
 - node data: `~/.yapping/` (`keys.json`, `node.db`, `local-token`, `bridges/`)
 - server data: `/var/lib/yapping/server.db`
-- install: `curl -fsSL https://yap.luqmaan.dev/install.sh | sh` puts in the node binary and the launchd agent, then opens sign-in.
+- install: **Add to Claude** on https://yap.luqmaan.dev downloads `yapping.mcpb`; Claude Desktop installs it in one click and runs `yap mcp`, which hosts the node in-process (or shares a running one) and opens sign-in on first run. An optional setting keeps it running via launchd when Claude is closed. (`curl -fsSL https://yap.luqmaan.dev/install.sh | sh` still works for developers.)

@@ -12,12 +12,12 @@ type Item = { t: 'env'; id: string; from: string; env: Record<string, unknown> }
 export function fakeServer() {
   const users = new Map<string, User>()
   const devices = new Map<string, Device>()
-  const pending = new Map<string, { user: User; name: string; boxPub: string; signPub: string; polls: number }>()
+  const pending = new Map<string, { user: User; name: string; boxPub: string; signPub: string; polls: number; manual: boolean; approved: boolean }>()
   const mailbox = new Map<string, Item[]>()
   const sockets = new Map<string, ServerWebSocket<{ deviceId: string }>>()
   const rpcs = new Map<string, (r: any) => void>()
   const frames: string[] = [] // everything nodes sent us over the socket
-  const logins: User[] = [] // who the next `yap login`s sign in as
+  const logins: { user: User; manual: boolean }[] = [] // who the next `yap login`s sign in as
   let n = 0
 
   const byToken = (req: Request) => {
@@ -45,10 +45,11 @@ export function fakeServer() {
       }
       if (req.method === 'POST' && p === '/api/device/start') {
         const b = await req.json()
-        const user = logins.shift()
-        if (!user) return json({ error: 'no login expected' }, 500)
+        const next = logins.shift()
+        if (!next) return json({ error: 'no login expected' }, 500)
+        const { user, manual } = next
         const deviceCode = `dc${++n}`
-        pending.set(deviceCode, { user, name: b.name, boxPub: b.boxPub, signPub: b.signPub, polls: 0 })
+        pending.set(deviceCode, { user, name: b.name, boxPub: b.boxPub, signPub: b.signPub, polls: 0, manual, approved: false })
         return json({ deviceCode, userCode: 'ABCD-1234', verifyUrl: `${server.url}verify/${deviceCode}`, interval: 1 })
       }
       if (req.method === 'POST' && p === '/api/device/poll') {
@@ -56,7 +57,8 @@ export function fakeServer() {
         const pe = pending.get(deviceCode)
         if (!pe) return json({ error: 'invalid_grant' }, 400)
         // The first poll is "still waiting", like a person reading the page.
-        if (pe.polls++ === 0) return json({ error: 'authorization_pending' }, 428)
+        // (A `manual` login waits until the test clicks "Link this Mac".)
+        if (pe.polls++ === 0 || (pe.manual && !pe.approved)) return json({ error: 'authorization_pending' }, 428)
         pending.delete(deviceCode)
         users.set(pe.user.id, pe.user)
         const d: Device = { deviceId: `dev${++n}`, userId: pe.user.id, boxPub: pe.boxPub, signPub: pe.signPub, name: pe.name, token: `tok${n}${Math.random().toString(36).slice(2)}`, lastSeen: null }
@@ -116,8 +118,16 @@ export function fakeServer() {
     mailbox,
     devices,
     // The next `yap login` signs in as this person.
-    expectLogin(u: { id: string; name: string; email?: string }) {
-      logins.push({ id: u.id, name: u.name, email: u.email || `${u.id}@example.com`, avatar: null })
+    // `manual`: wait for approve() instead of approving on the second poll.
+    expectLogin(u: { id: string; name: string; email?: string }, opts: { manual?: boolean } = {}) {
+      logins.push({ user: { id: u.id, name: u.name, email: u.email || `${u.id}@example.com`, avatar: null }, manual: !!opts.manual })
+    },
+    // The person clicks "Link this Mac" on every sign-in page that's open.
+    approveAll() {
+      for (const pe of pending.values()) pe.approved = true
+    },
+    get pendingLogins() {
+      return pending.size
     },
     isOnline: (deviceId: string) => sockets.has(deviceId),
     // The gateway: call a node's RPC over its socket, as /mcp would.

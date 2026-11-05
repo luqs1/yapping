@@ -2,18 +2,24 @@
   "name": "yapping-node",
   "private": true,
   "type": "module",
-  "bin": { "yap": "src/cli.ts" },
+  "bin": {
+    "yap": "src/cli.ts"
+  },
   "scripts": {
     "daemon": "bun run src/cli.ts daemon",
     "test": "bun test",
-    "build": "sh build.sh"
+    "build": "sh build.sh",
+    "mcpb": "sh mcpb/build.sh"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@modelcontextprotocol/core": "^2.4.0",
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
+    "@modelcontextprotocol/server": "^2.4.0",
     "tweetnacl": "^1.0.3",
     "zod": "^4.1.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
     "@types/bun": "latest"
   }
 }

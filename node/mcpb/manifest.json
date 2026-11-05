@@ -1,0 +1,49 @@
+{
+  "manifest_version": "0.3",
+  "name": "yapping",
+  "display_name": "yapping",
+  "version": "0.1.0",
+  "description": "Your chats with real people, in a sidebar beside Claude.",
+  "long_description": "yapping is a messenger that lives beside your AI. Text the people you work with (and your WhatsApp chats, once linked) from a sidebar in Claude.\n\n- **Messages stay on your Mac.** They're end-to-end encrypted between devices; the yapping server only relays sealed envelopes.\n- **Claude sees a chat only if you switch it on**, chat by chat.\n- **Claude never writes to people for you.** It can suggest a reply, a link or an invite, and nothing is sent until you approve it.\n\nOn first launch a browser page opens: sign in and click \"Link this Mac\".",
+  "author": {
+    "name": "Luqmaan",
+    "url": "https://yap.luqmaan.dev"
+  },
+  "homepage": "https://yap.luqmaan.dev",
+  "support": "https://yap.luqmaan.dev",
+  "icon": "icon.png",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/yap",
+    "mcp_config": {
+      "command": "${__dirname}/server/yap",
+      "args": ["mcp"],
+      "env": {
+        "YAP_AGENT": "claude",
+        "YAP_KEEP_RUNNING": "${user_config.keep_running}"
+      }
+    }
+  },
+  "tools": [
+    { "name": "yap_inbox", "description": "Show your yapping inbox and open the sidebar" },
+    { "name": "yap_read", "description": "Read a chat you've let Claude see" },
+    { "name": "yap_send", "description": "Send your exact words to someone" },
+    { "name": "yap_propose", "description": "Suggest a reply, link, file or invite for you to approve" },
+    { "name": "yap_sign_in", "description": "Link this Mac to your yapping account" }
+  ],
+  "tools_generated": true,
+  "keywords": ["messaging", "chat", "whatsapp", "messenger", "sidebar"],
+  "privacy_policies": ["https://yap.luqmaan.dev/privacy"],
+  "compatibility": {
+    "platforms": ["darwin"]
+  },
+  "user_config": {
+    "keep_running": {
+      "type": "boolean",
+      "title": "Keep yapping running when Claude is closed",
+      "description": "Messages keep arriving on this Mac while Claude is closed, so they're here when you come back.",
+      "default": false,
+      "required": false
+    }
+  }
+}

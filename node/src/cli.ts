@@ -13,7 +13,7 @@
 
 import { localClient } from './client'
 import { login, logout, openInBrowser } from './login'
-import { ensureHome, loadConfig, localPort, localToken, yapHome } from './paths'
+import { ensureHome, loadConfig, localToken, yapHome } from './paths'
 import { serverApi } from './server-api'
 import { installService, uninstallService } from './service'
 
@@ -36,15 +36,25 @@ const say = (s = '') => console.log(s)
 
 async function daemon() {
   const { startNode } = await import('./node')
-  const { startApi } = await import('./api')
+  const { claimApi } = await import('./api')
   const stamp = () => new Date().toISOString().slice(0, 19).replace('T', ' ')
   const log = (...a: unknown[]) => console.log(stamp(), ...a)
-  const node = await startNode({ home, log })
-  const api = startApi({ node, token: localToken(home), port: localPort(), home, log })
+  // Claim the port first: it's the lock that keeps two nodes off one home.
+  let node: Awaited<ReturnType<typeof startNode>> | null = null
+  const claim = await claimApi({ node: () => node, token: localToken(home), home, log }).catch((e) => {
+    console.error(`No free port for the local API (${(e as Error).message}).`)
+    process.exit(1)
+  })
+  if ('running' in claim) {
+    console.error(`A yapping node is already running for ${home} at ${claim.running}.`)
+    process.exit(1)
+  }
+  const { api } = claim
+  node = await startNode({ home, log })
   log(`yapping node ${home} → http://127.0.0.1:${api.port} (server ${node.config.server})`)
   const bye = async () => {
     api.stop()
-    await node.stop()
+    await node?.stop()
     process.exit(0)
   }
   process.on('SIGINT', bye)
@@ -88,8 +98,9 @@ async function main() {
     case 'open': {
       const local = localClient({ home })
       if (!(await local.health()).ok) return say("The node isn't running. Run `yap service install` first.")
-      openInBrowser(local.base + '/')
-      return say(`Opened ${local.base}/`)
+      const { base } = await local.health()
+      openInBrowser(base + '/')
+      return say(`Opened ${base}/`)
     }
     case 'contacts': {
       const cfg = loadConfig(home)

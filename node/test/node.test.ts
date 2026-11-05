@@ -5,8 +5,6 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { applyEvent, createSim } from '../../shared/sim.js'
 import { startApi } from '../src/api'
 import { login } from '../src/login'
@@ -296,25 +294,6 @@ describe('the local API', () => {
     expect(seen).toBe(true)
     ac.abort()
   })
-})
-
-describe('yap mcp', () => {
-  test('lists its model-visible tools over stdio, and calls the node', async () => {
-    const transport = new StdioClientTransport({
-      command: process.execPath,
-      args: [join(import.meta.dir, '..', 'src', 'cli.ts'), 'mcp'],
-      env: { ...process.env, YAP_HOME: aliceHome, YAP_API: alice.base } as Record<string, string>,
-      stderr: 'pipe',
-    })
-    const client = new Client({ name: 'claude-code', version: 'test' })
-    await client.connect(transport)
-    const { tools } = await client.listTools()
-    expect(tools.map((t) => t.name).sort()).toEqual(['yap_inbox', 'yap_propose', 'yap_read', 'yap_send'])
-    expect(tools.find((t) => t.name === 'yap_send')!.description).toContain('exact words')
-    const r: any = await client.callTool({ name: 'yap_inbox', arguments: {} })
-    expect(JSON.parse(r.content[0].text).me.id).toBe(ALICE.id)
-    await client.close()
-  }, 15000)
 })
 
 describe('service', () => {

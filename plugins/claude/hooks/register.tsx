@@ -31,10 +31,17 @@ let busy = false
 
 // The node on this Mac holds the messages; its local API is gated by a
 // token it writes to ~/.yapping/local-token.
+// The node may not be on its usual port (another app can hold 7790); it says
+// which one in ~/.yapping/api.json. An explicit `node` option wins.
+let pinned = false
 async function nodeToken($: $) {
   if (token) return token
   const dir = home || `${(await $.env.get('HOME')) ?? ''}/.yapping`
   token = (await $.fs.read(`${dir}/local-token`)).trim()
+  if (!pinned) {
+    const port = await $.fs.read(`${dir}/api.json`).then((t) => Number(JSON.parse(t).port)).catch(() => 0)
+    if (port > 0) base = `http://127.0.0.1:${port}`
+  }
   return token
 }
 
@@ -171,7 +178,8 @@ const bridgeName = (snap: Snap, t: string) => snap.bridges[t]?.name ?? t
 const time = (ts: number) => new Date(ts).toTimeString().slice(0, 5)
 
 export const register: Register = (on, options) => {
-  base = String(options.node ?? 'http://127.0.0.1:7790').replace(/\/$/, '')
+  pinned = !!options.node && options.node !== 'http://127.0.0.1:7790'
+  base = String(options.node || 'http://127.0.0.1:7790').replace(/\/$/, '')
   home = String(options.home ?? '')
 
   // ── lifecycle ────────────────────────────────────────────────────────

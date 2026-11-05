@@ -11,7 +11,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 
 export const DEFAULT_SERVER = 'https://yap.luqmaan.dev'
 export const DEFAULT_PORT = 7790
@@ -43,6 +43,8 @@ export type Config = {
   deviceName?: string
   // Which harness this person's agent is, for assistedBy and the chibi.
   agent?: string
+  // Who installed the launchd agent ('mcpb': the Claude bundle, which may also remove it).
+  service?: string
 }
 
 export function loadConfig(home: string, env = process.env): Config {
@@ -73,6 +75,26 @@ export function localToken(home: string): string {
   const t = randomBytes(24).toString('base64url')
   writePrivate(path, t)
   return t
+}
+
+// The port the local API actually got. 7790 is the default, but another
+// program may hold it (agentbus does on some Macs), so the node takes the
+// next free one and says which in YAP_HOME/api.json.
+export function apiPort(home: string): number | undefined {
+  try {
+    const p = Number(JSON.parse(readFileSync(join(home, 'api.json'), 'utf8')).port)
+    return p > 0 ? p : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// Which YAP_HOME a node serves, without saying the path: /health carries it
+// so a client never talks to another home's node.
+export const homeId = (home: string) => createHash('sha256').update(home).digest('hex').slice(0, 12)
+
+export function saveApiPort(home: string, port: number) {
+  writePrivate(join(home, 'api.json'), JSON.stringify({ port, pid: process.pid }))
 }
 
 export function localPort(env = process.env): number {
