@@ -16,7 +16,7 @@ import { avatar, message, page } from './pages'
 import {
   type DeviceRow, type UserRow, apiCaller, connect, getUser, isContact, publicDevice, publicUser, sessionUser,
 } from './users'
-import { DAY, body, err, esc, id, json, now } from './util'
+import { DAY, body, err, esc, id, json, now, crossSite } from './util'
 
 const INVITE_TTL = 14 * DAY
 
@@ -161,8 +161,7 @@ export function invitePage(ctx: Ctx, req: Request, code: string) {
 export function invitePagePost(ctx: Ctx, req: Request, code: string) {
   const user = sessionUser(ctx.db, req)
   if (!user) return signinRedirect(req)
-  const origin = req.headers.get('origin')
-  if (origin && origin !== ctx.cfg.origin) return err(403, 'bad_origin')
+  if (crossSite(req, ctx.cfg.origin)) return err(403, 'bad_origin')
   const r = accept(ctx, user, code)
   if (r.problem === 'expired') return message('This invite has expired', 'Ask whoever sent it for a new link.', 404)
   if (r.problem === 'self') return message('That\'s your own invite', 'Send it to someone else.')
@@ -179,8 +178,7 @@ export function invitePagePost(ctx: Ctx, req: Request, code: string) {
 export function accountInvite(ctx: Ctx, req: Request) {
   const user = sessionUser(ctx.db, req)
   if (!user) return signinRedirect(req)
-  const origin = req.headers.get('origin')
-  if (origin && origin !== ctx.cfg.origin) return err(403, 'bad_origin')
+  if (crossSite(req, ctx.cfg.origin)) return err(403, 'bad_origin')
   const { url } = makeInvite(ctx, user.id)
   return page('Invite link', `
     <h1>Your invite link</h1>

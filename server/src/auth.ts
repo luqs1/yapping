@@ -10,7 +10,7 @@ import { createClerkClient, verifyToken } from '@clerk/backend'
 import type { Ctx } from './ctx'
 import { avatar, page } from './pages'
 import { type UserRow, endSession, publicDevice, publicUser, sessionUser, startSession, upsertUser } from './users'
-import { body, err, esc, json, redirect, safeNext } from './util'
+import { body, err, esc, json, redirect, safeNext, crossSite } from './util'
 
 // ---- helpers -------------------------------------------------------------
 
@@ -77,8 +77,7 @@ export function signinPage(ctx: Ctx, req: Request) {
 // POST /auth/clerk {token, next}: a Clerk session token in, our session out.
 export async function clerkExchange(ctx: Ctx, req: Request) {
   if (!ctx.cfg.clerk) return err(503, 'not_configured')
-  const origin = req.headers.get('origin')
-  if (origin && origin !== ctx.cfg.origin) return err(403, 'bad_origin')
+  if (crossSite(req, ctx.cfg.origin)) return err(403, 'bad_origin')
   const b = await body(req)
   let claims
   try {
@@ -152,8 +151,7 @@ export function accountPage(ctx: Ctx, req: Request) {
 export function removeDevice(ctx: Ctx, req: Request, deviceId: string) {
   const user = sessionUser(ctx.db, req)
   if (!user) return signinRedirect(req)
-  const origin = req.headers.get('origin')
-  if (origin && origin !== ctx.cfg.origin) return err(403, 'bad_origin')
+  if (crossSite(req, ctx.cfg.origin)) return err(403, 'bad_origin')
   const gone = ctx.db.query('DELETE FROM devices WHERE id = ? AND user_id = ?').run(deviceId, user.id).changes
   if (gone) {
     ctx.db.query('DELETE FROM mailbox WHERE to_device = ?').run(deviceId)

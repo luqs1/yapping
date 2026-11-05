@@ -16,7 +16,7 @@ import type { Ctx } from './ctx'
 import { signinRedirect } from './auth'
 import { page } from './pages'
 import { publicUser, sessionUser, getUser } from './users'
-import { MIN, body, clientIp, err, esc, id, json, limited, now, secret, sha256, userCode } from './util'
+import { MIN, body, clientIp, err, esc, id, json, limited, now, secret, sha256, userCode, crossSite } from './util'
 
 const CODE_TTL = 10 * MIN
 const INTERVAL = 2 // seconds between polls
@@ -101,8 +101,7 @@ export function linkPage(ctx: Ctx, req: Request) {
 export async function linkDecide(ctx: Ctx, req: Request) {
   const user = sessionUser(ctx.db, req)
   if (!user) return signinRedirect(req)
-  const origin = req.headers.get('origin')
-  if (origin && origin !== ctx.cfg.origin) return err(403, 'bad_origin')
+  if (crossSite(req, ctx.cfg.origin)) return err(403, 'bad_origin')
   const b = await body(req)
   const row = pendingByUserCode(ctx, String(b.code || ''))
   if (!row) return page('Code expired', `<h1>That code has expired</h1><p>Run <b>yap login</b> on your Mac again to get a new one.</p>`, { status: 410 })

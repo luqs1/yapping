@@ -61,6 +61,17 @@ describe('sign in', () => {
 })
 
 describe('linking a Mac (device code)', () => {
+  test('Firefox-family browsers can link (Origin: null, same-origin fetch); other sites cannot', async () => {
+    const { cookie } = await login(base, 'zen@example.com')
+    const start = async () => (await (await fetch(`${base}/api/device/start`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Zen Mac', boxPub: key(), signPub: key() }) })).json()) as any
+    const post = (code: string, h: Record<string, string>) => fetch(`${base}/link`, { method: 'POST', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', ...h }, body: new URLSearchParams({ code, decision: 'approve' }), redirect: 'manual' })
+    const a = await start()
+    expect((await post(a.userCode, { origin: 'null', 'sec-fetch-site': 'same-origin' })).status).toBe(200)
+    const b = await start()
+    expect((await post(b.userCode, { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' })).status).toBe(403)
+    expect((await post(b.userCode, { origin: 'null', 'sec-fetch-site': 'cross-site' })).status).toBe(403)
+  })
+
   test('start → approve → poll gives a device token once', async () => {
     const { cookie, user } = await login(base, 'mac@example.com')
     const start = await (await fetch(`${base}/api/device/start`, {

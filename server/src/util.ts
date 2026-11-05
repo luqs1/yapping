@@ -47,7 +47,7 @@ export function html(body: string, status = 200, headers: Record<string, string>
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'no-store',
       'x-frame-options': 'DENY',
-      'referrer-policy': 'no-referrer',
+      'referrer-policy': 'same-origin',
       ...headers,
     },
   })
@@ -117,3 +117,12 @@ export function limited(key: string, max: number, windowMs: number) {
 // Only local paths may be used as a post-sign-in destination.
 export const safeNext = (next: unknown) =>
   typeof next === 'string' && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/account'
+
+// A form post from one of our own pages? Browsers say so in Origin, except
+// that some (Firefox, Zen) send "Origin: null" under strict referrer rules;
+// then Sec-Fetch-Site, which a page can't forge, decides.
+export function crossSite(req: Request, origin: string) {
+  const o = req.headers.get('origin')
+  if (!o || o === origin) return false
+  return !(o === 'null' && req.headers.get('sec-fetch-site') === 'same-origin')
+}
