@@ -27,30 +27,31 @@ describe('sign in', () => {
     expect((await fetch(`${base}/api/me`)).status).toBe(401)
   })
 
-  test('the sign-in page offers email and passkey, and hides Google when unset', async () => {
-    const html = await (await fetch(`${base}/signin`)).text()
-    expect(html).toContain('Email me a sign-in link')
-    expect(html).toContain('Sign in with a passkey')
-    expect(html).not.toContain('Continue with Google')
+  // A made-up key whose Frontend API is example.clerk.accounts.dev.
+  const CLERK = { CLERK_PUBLISHABLE_KEY: `pk_test_${btoa('example.clerk.accounts.dev$')}`, CLERK_SECRET_KEY: 'sk_test_fake' }
+
+  test('the sign-in page mounts Clerk from the key\'s Frontend API', async () => {
+    const c = testServer(CLERK)
+    try {
+      const html = await (await fetch(`${c.url}/signin?next=/account`)).text()
+      expect(html).toContain('https://example.clerk.accounts.dev/npm/@clerk/clerk-js@6/dist/clerk.browser.js')
+      expect(html).toContain(`data-clerk-publishable-key="${CLERK.CLERK_PUBLISHABLE_KEY}"`)
+      expect(html).toContain('mountSignIn')
+      expect(html).toContain('"/account"')
+    } finally { await c.close() }
   })
 
-  test('an email link signs you in once', async () => {
-    const logs: string[] = []
-    const orig = console.log
-    console.log = (...a: unknown[]) => { logs.push(a.join(' ')) }
+  test('without Clerk keys the sign-in page says so', async () => {
+    expect((await fetch(`${base}/signin`)).status).toBe(503)
+  })
+
+  test('/auth/clerk refuses a token that is not Clerk\'s', async () => {
+    const c = testServer(CLERK)
     try {
-      const res = await fetch(`${base}/auth/email`, { method: 'POST', body: new URLSearchParams({ email: 'mail@example.com', next: '/account' }) })
-      expect(res.status).toBe(200)
-    } finally { console.log = orig }
-    const link = logs.join('\n').match(/https?:\/\/\S+\/auth\/email\/verify\?token=\S+/)![0]
-    const token = new URL(link).searchParams.get('token')!
-    expect(await (await fetch(link)).text()).toContain('mail@example.com') // the landing page, not yet signed in
-    const done = await fetch(`${base}/auth/email/verify`, { method: 'POST', body: new URLSearchParams({ token }), redirect: 'manual' })
-    expect(done.status).toBe(302)
-    expect(done.headers.get('location')).toBe('/account')
-    expect(done.headers.get('set-cookie')).toContain('yap_session=')
-    const again = await fetch(`${base}/auth/email/verify`, { method: 'POST', body: new URLSearchParams({ token }), redirect: 'manual' })
-    expect(again.status).toBe(410)
+      const res = await fetch(`${c.url}/auth/clerk`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'not-a-jwt', next: '/account' }) })
+      expect(res.status).toBe(401)
+      expect(res.headers.get('set-cookie')).toBeNull()
+    } finally { await c.close() }
   })
 
   test('/dev/login is off without YAP_DEV', async () => {

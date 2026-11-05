@@ -13,8 +13,7 @@ export type Config = {
   port: number
   dataDir: string
   dev: boolean // YAP_DEV=1: /dev/login, links logged, http CIMD on loopback
-  google?: { clientId: string; clientSecret: string }
-  mail?: { resendKey: string; from: string }
+  clerk?: { publishableKey: string; secretKey: string; frontendApi: string }
   uiDist: string // ui/dist/sidebar.html
   publicDir: string // server/public (install.sh)
   rpcTimeoutMs: number
@@ -31,11 +30,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     port,
     dataDir: env.YAP_DATA || (dev ? join(SERVER_DIR, '.data') : '/var/lib/yapping'),
     dev,
-    google: env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
-      ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
-      : undefined,
-    mail: env.RESEND_API_KEY
-      ? { resendKey: env.RESEND_API_KEY, from: env.YAP_MAIL_FROM || 'yapping <hello@yap.luqmaan.dev>' }
+    clerk: env.CLERK_PUBLISHABLE_KEY && env.CLERK_SECRET_KEY
+      ? { publishableKey: env.CLERK_PUBLISHABLE_KEY, secretKey: env.CLERK_SECRET_KEY, frontendApi: frontendApi(env.CLERK_PUBLISHABLE_KEY) }
       : undefined,
     uiDist: env.YAP_UI_DIST || join(SERVER_DIR, '..', 'ui', 'dist', 'sidebar.html'),
     publicDir: join(SERVER_DIR, 'public'),
@@ -43,4 +39,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     ...over,
   }
   return cfg
+}
+
+// A Clerk publishable key is "pk_test_" or "pk_live_" plus base64 of the
+// Frontend API host and a trailing "$": that host serves ClerkJS.
+export function frontendApi(publishableKey: string) {
+  return atob(publishableKey.split('_').slice(2).join('_')).replace(/\$$/, '')
 }

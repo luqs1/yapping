@@ -43,14 +43,7 @@ export function startServer(env: Record<string, string | undefined> = process.en
       '/account': { GET: r(auth.accountPage) },
       '/account/invite': { POST: r(dir.accountInvite) },
       '/account/devices/:id/remove': { POST: (req) => auth.removeDevice(ctx, req, req.params.id) },
-      '/auth/google': { GET: r(auth.googleStart) },
-      '/auth/google/callback': { GET: r(auth.googleCallback) },
-      '/auth/email': { POST: r(auth.emailStart) },
-      '/auth/email/verify': { GET: r(auth.emailLanding), POST: r(auth.emailVerify) },
-      '/auth/passkey/login/options': { POST: r(auth.passkeyLoginOptions) },
-      '/auth/passkey/login/verify': { POST: r(auth.passkeyLoginVerify) },
-      '/auth/passkey/register/options': { POST: r(auth.passkeyRegisterOptions) },
-      '/auth/passkey/register/verify': { POST: r(auth.passkeyRegisterVerify) },
+      '/auth/clerk': { POST: r(auth.clerkExchange) },
       '/dev/login': { GET: r(auth.devLogin) },
 
       // Linking a Mac.

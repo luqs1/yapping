@@ -9,3 +9,7 @@ plugins/pi/vendor/
 node/dist/
 ui/dist/
 *.db
+# secrets
+.env
+.env.*
+.clerk/

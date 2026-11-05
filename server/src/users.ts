@@ -11,7 +11,7 @@ import { DAY, cookie, id, now, parseCookies, secret, sha256 } from './util'
 
 export type UserRow = {
   id: string; email: string; name: string; avatar: string | null
-  google_sub: string | null; domain: string | null; created_at: number
+  google_sub: string | null; clerk_id: string | null; domain: string | null; created_at: number
 }
 export type DeviceRow = {
   id: string; user_id: string; name: string; box_pub: string; sign_pub: string
@@ -25,25 +25,26 @@ export const publicDevice = (d: DeviceRow) => ({ deviceId: d.id, boxPub: d.box_p
 export const getUser = (db: DB, userId: string) => db.query<UserRow, [string]>('SELECT * FROM users WHERE id = ?').get(userId)
 export const userByEmail = (db: DB, email: string) => db.query<UserRow, [string]>('SELECT * FROM users WHERE email = ?').get(email.toLowerCase())
 
-// Find or make the user for a verified email. Google sign-ins also carry a
-// stable `sub` (preferred over the email, which can change) and, for
-// Workspace accounts, the domain.
-export function upsertUser(db: DB, p: { email: string; name?: string; avatar?: string | null; googleSub?: string; domain?: string | null }): UserRow {
+// Find or make the user. A Clerk sign-in carries a stable Clerk user id,
+// preferred over the email (which can change); `email` is their primary
+// email, or their phone number when they signed up with a phone.
+export function upsertUser(db: DB, p: { email: string; name?: string; avatar?: string | null; clerkId?: string; domain?: string | null }): UserRow {
   const email = p.email.trim().toLowerCase()
-  let u = (p.googleSub && db.query<UserRow, [string]>('SELECT * FROM users WHERE google_sub = ?').get(p.googleSub)) || userByEmail(db, email)
+  let u = (p.clerkId && db.query<UserRow, [string]>('SELECT * FROM users WHERE clerk_id = ?').get(p.clerkId)) || userByEmail(db, email)
   if (!u) {
     const userId = id(9)
-    db.query('INSERT INTO users (id, email, name, avatar, google_sub, domain, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(userId, email, p.name?.trim() || defaultName(email), p.avatar ?? null, p.googleSub ?? null, p.domain ?? null, now())
+    db.query('INSERT INTO users (id, email, name, avatar, clerk_id, domain, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(userId, email, p.name?.trim() || defaultName(email), p.avatar ?? null, p.clerkId ?? null, p.domain ?? null, now())
     return getUser(db, userId)!
   }
   db.query(`UPDATE users SET
-      google_sub = COALESCE(?, google_sub),
+      clerk_id = COALESCE(?, clerk_id),
+      email = ?,
       avatar = COALESCE(?, avatar),
       domain = COALESCE(?, domain),
       name = CASE WHEN ? IS NOT NULL AND name = ? THEN ? ELSE name END
     WHERE id = ?`)
-    .run(p.googleSub ?? null, p.avatar ?? null, p.domain ?? null, p.name ?? null, defaultName(u.email), p.name ?? null, u.id)
+    .run(p.clerkId ?? null, email, p.avatar ?? null, p.domain ?? null, p.name ?? null, defaultName(u.email), p.name ?? null, u.id)
   return getUser(db, u.id)!
 }
 

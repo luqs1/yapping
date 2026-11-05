@@ -17,7 +17,7 @@ Three programs, one contract.
 ```
 
 ## Identity and keys
-- **Users** sign in to the server with Google (OIDC), an email magic link, or a passkey (WebAuthn, RP id `yap.luqmaan.dev`). The browser session is an httpOnly cookie.
+- **Users** sign in with Clerk (whichever of Google, Apple, email, phone and passkeys the Clerk app has switched on), on the server's own `/signin` page. That page posts the Clerk session token to `POST /auth/clerk`, and the server verifies it (`@clerk/backend`) and sets its own httpOnly session cookie. Users are keyed by their Clerk user id. The OAuth server that chat hosts use stays ours: its consent step uses that same session.
 - **Devices.** Each node generates a NaCl box keypair (X25519) and a signing keypair (Ed25519) on first run and stores them in `~/.yapping/keys.json` (mode 600). Public keys are registered with the server when the device is linked.
 - **Linking a device** (`yap login`, a device-code flow):
   1. The node calls `POST /api/device/start {name, boxPub, signPub}` and gets back `{deviceCode, userCode, verifyUrl}`.

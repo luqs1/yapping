@@ -20,8 +20,9 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   avatar TEXT,
-  google_sub TEXT UNIQUE,
-  domain TEXT,                       -- Google Workspace domain (the id token's hd), if any
+  google_sub TEXT UNIQUE,            -- unused since Clerk; kept so old rows load
+  clerk_id TEXT UNIQUE,              -- the Clerk user this person signs in as
+  domain TEXT,                       -- their work email's domain, for suggesting teammates
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS users_domain ON users(domain);
@@ -162,6 +163,11 @@ export function openDb(dataDir: string): DB {
   const db = new Database(join(dataDir, 'server.db'), { create: true, strict: true })
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;')
   db.exec(SCHEMA)
+  // Databases made before Clerk lack its column.
+  if (!db.query<{ name: string }, []>('PRAGMA table_info(users)').all().some((c) => c.name === 'clerk_id')) {
+    db.exec('ALTER TABLE users ADD COLUMN clerk_id TEXT')
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_clerk ON users(clerk_id)')
+  }
   return db
 }
 
