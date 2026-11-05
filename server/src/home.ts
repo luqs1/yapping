@@ -8,7 +8,7 @@ export function homePage(origin: string, signedIn: boolean) {
   const copy = (text: string) =>
     `<div class="cmd"><code>${esc(text)}</code><button type="button" class="copy" data-copy="${esc(text)}" aria-label="Copy">Copy</button></div>`
   return page(
-    'yapping',
+    'Chat beside your AI',
     `<style>
       main{max-width:560px}
       .lede{font-size:18px;color:#333;margin:0 0 28px}
