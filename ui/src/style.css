@@ -341,3 +341,88 @@ body:has(#yap[data-layout="compact"]), html:has(#yap[data-layout="compact"]) { h
 .shot .sheet, .shot .scrim { transition: none !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 body:has(#yap.inplace), html:has(#yap.inplace) { height: auto; overflow: visible; }
+
+/* ───────── starting a chat ───────── */
+.rows-k { font-size: 11px; color: var(--mute); padding: 12px 8px 4px; }
+.li.person .li-pv { color: var(--ink2); }
+.li-go { color: var(--mute); display: grid; opacity: 0; transition: opacity .15s; }
+.li.person:hover .li-go, .li.person:focus-visible .li-go { opacity: 1; }
+.welcome { padding: 18px 8px 8px; }
+.wl-t { margin: 0; font: var(--title-w) 15px/1.3 var(--title); }
+.wl-s { margin: 3px 0 0; font-size: 12.5px; color: var(--mute); }
+.wl-inv { padding: 10px 8px 4px; }
+.btn-ghost { display: inline-flex; align-items: center; gap: 7px; border: 1px dashed var(--line2); background: transparent; color: var(--ink2); border-radius: 10px; padding: 7px 12px; font-size: 12.5px; }
+.btn-ghost:hover { background: var(--hover); color: var(--ink); border-style: solid; }
+.invite-box { display: flex; flex-direction: column; gap: 6px; margin: 0; font-size: 12px; }
+.invite-url { display: flex; align-items: center; gap: 6px; }
+.invite-url code, .invite-box code, .gate-cmd code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 7px; user-select: all; color: var(--ink); }
+.invite-url code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite-url .btn-dark { padding: 4px 10px; }
+.mn-people { max-height: 228px; overflow-y: auto; scrollbar-width: thin; }
+.mn-row .av { margin: 0; }
+.mn-inv { background: var(--bg2); color: var(--ink2); }
+.mn-sep { border-top: 1px solid var(--line); margin: 6px 2px 0; padding-top: 10px; }
+.mn-invite { padding: 2px 8px 8px; }
+#yap.nochat .foot { display: none; }
+#yap.nochat .ch { display: none; }
+
+/* the other side's agents in this chat: a quiet line in the header */
+.ch { flex-wrap: wrap; row-gap: 2px; }
+.ch-peers { order: 10; flex-basis: 100%; display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--mute); padding: 0 0 0 44px; min-width: 0; }
+.ch-peers span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-peers-c { display: grid; opacity: .8; }
+@container chat (max-width: 470px) { .ch-peers { padding-left: 2px; } }
+
+/* what will be sent, on a proposal card */
+.prop-pl { margin: 8px 0 0; font-size: 12.5px; line-height: 1.42; color: var(--ink); }
+.pl-text { border-left: 2px solid var(--fb-accent); background: var(--bg2); border-radius: 0 8px 8px 0; padding: 6px 10px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 168px; overflow-y: auto; }
+.pl-card { display: flex; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 6px 6px; }
+.pl-card .at-ic { width: 32px; height: 32px; }
+.at-ic.ev { color: var(--fb-accent); }
+.pl-card .at-b b { white-space: normal; overflow-wrap: anywhere; font-size: 12.5px; }
+.pl-url { display: block; font-size: 11.5px; color: var(--ink2); overflow-wrap: anywhere; }
+a.pl-url { text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 2px; }
+a.pl-url:hover { color: var(--ink); text-decoration-color: currentColor; }
+small.pl-url { color: var(--mute); }
+
+/* reactions bar: beside the bubble, its emoji row opens above */
+.row:not(:has(.row-av)) .bw { max-width: min(80%, 520px, calc(100% - 64px)); }
+.row:has(.row-av) .bw { max-width: min(80%, 520px, calc(100% - 96px)); }
+.hover { top: 2px; right: auto; gap: 1px; padding: 1px 2px; }
+.row.them .hover { left: calc(100% + 4px); }
+.row.mine .hover { left: auto; right: calc(100% + 4px); flex-direction: row-reverse; }
+.hover > button, .hv-rx { color: var(--ink2); }
+.hv-pick { display: inline-flex; }
+/* anchored to the bar's outer end, so it opens into the row, not off its edge */
+.rxpick { position: absolute; bottom: 100%; right: -2px; display: none; padding-bottom: 6px; }
+.rxpick::before { content: ""; position: absolute; inset: 0 0 6px; background: var(--card); border: 1px solid var(--line); border-radius: 99px; box-shadow: var(--shadow); }
+.rxpick button { position: relative; }
+.hv-pick:hover .rxpick, .hv-pick:focus-within .rxpick { display: flex; }
+
+/* "what it did", opened in place under its card */
+.under-sh { display: flex; margin: 0 0 10px; }
+.under-sh.mine { justify-content: flex-end; }
+.under-sh.ind { margin-left: 37px; }
+.sh.inline { width: min(100%, 420px); border: 1px solid var(--line); border-radius: 14px; box-shadow: none; padding: 12px 14px 10px; }
+.sh.inline .sh-foot { margin-top: 8px; }
+
+/* signed out / not running */
+#yap[data-layout="gate"] { display: block; overflow-y: auto; }
+.gate { min-height: 100%; display: grid; place-items: center; padding: 28px 20px; }
+.gate-in { width: min(340px, 100%); text-align: center; display: flex; flex-direction: column; align-items: center; }
+.gate-mark svg { display: block; }
+.gate-t { margin: 10px 0 0; font: var(--title-w) 24px/1.15 var(--title); letter-spacing: -.015em; }
+.gate-lede { margin: 8px 0 18px; font-size: 13.5px; line-height: 1.5; color: var(--ink2); }
+.gate-h { margin: 16px 0 6px; font: var(--title-w) 16px/1.3 var(--title); }
+.gate-btn { width: 100%; padding: 10px 16px; font-size: 14px; border-radius: 10px; }
+.gate-code { margin: 16px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.gate-code small { font-size: 11.5px; color: var(--mute); }
+.gate-code b { font: 600 26px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; color: var(--ink); background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; user-select: all; }
+.gate-hint { margin: 12px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink2); }
+.gate-hint b { color: var(--ink); font-weight: 600; }
+.gate-hint.dim { color: var(--mute); }
+.gate-cmd { margin: 10px 0 0; display: flex; align-items: center; gap: 4px; }
+.gate-cmd code { font-size: 13px; padding: 7px 10px; }
+.gate-wait { display: flex; align-items: center; gap: 2px; margin: 18px 0 0; font-size: 12px; color: var(--mute); }
+.gate-wait .ell { margin: 0 6px 0 0; }
+.shot .sh.inline { animation: none !important; }

@@ -49,6 +49,8 @@ export function reduce(state, ev) {
   if (ev.seq && ev.seq <= (state.seq || 0)) return state
   switch (ev.type) {
     case 'chat_update': {
+      // A real DM replaces the draft the UI opened for that person.
+      if (ev.chat?.kind === 'dm') state.chats = state.chats.filter((c) => !(c.draft && ev.chat.members?.includes(c.draftWith)))
       // An unknown chat id means a new chat.
       if (!state.chats.some((c) => c.id === ev.chatId)) {
         state.chats.push(normChat(ev.chat, state.me))
@@ -111,6 +113,12 @@ export function unwrap(body) {
     const e = body.error
     const err = new Error(typeof e === 'string' ? e : e.message || e.code || 'Something went wrong')
     err.code = typeof e === 'object' ? e.code : e
+    // Extra fields ride along: the node puts {url, userCode} on not_signed_in,
+    // in `data` locally and flat on the error inside MCP tool results.
+    if (typeof e === 'object') {
+      const { code, message, data, ...rest } = e
+      err.data = { ...rest, ...(data && typeof data === 'object' ? data : {}) }
+    }
     throw err
   }
   if (body && typeof body === 'object' && 'result' in body) return body.result

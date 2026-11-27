@@ -13,6 +13,10 @@
 //   yap.supports(feature)          'typing' | 'fullscreen'
 //
 // Pick: inside an MCP host → mcp-app; window.__YAP__ → local; else demo.
+//
+// connect({ onWaiting }) keeps retrying the first load while yapping is
+// signed out or unreachable, calling onWaiting(err, { openLink }) each time,
+// so a sign-in finishing elsewhere just makes the sidebar appear.
 import { createStore, unwrap } from './store.js'
 
 const params = new URLSearchParams(location.search)
@@ -26,6 +30,22 @@ export function agentFrom(name = '') {
   if (/opencode/.test(n)) return 'opencode'
   if (/\bpi\b/.test(n)) return 'pi'
   return null
+}
+
+// Signed out, or the node can't be reached right now: worth waiting for.
+export function waitable(e) {
+  return ['not_signed_in', 'offline', 'starting'].includes(e?.code) || /not signed in|offline|asleep|didn.t answer|can.t reach/i.test(String(e?.message || ''))
+}
+async function firstLoad(load, onWaiting, extra = {}) {
+  for (;;) {
+    try {
+      return await load()
+    } catch (e) {
+      if (!onWaiting || !waitable(e)) throw e
+      onWaiting(e, extra)
+      await new Promise((r) => setTimeout(r, e.code === 'not_signed_in' ? 2500 : 4000))
+    }
+  }
 }
 
 function base(kind, store, extra = {}) {
@@ -45,18 +65,67 @@ function base(kind, store, extra = {}) {
 }
 
 // ───────────────────────── demo: shared/sim.js in the page ─────────────────────────
-export async function connectDemo() {
+export async function connectDemo({ onWaiting } = {}) {
   const { createSim } = await import('../../shared/sim.js')
   const store = createStore()
   const agent = agentFrom(params.get('agent')) || 'claude'
   const user = params.get('user') || 'luqmaan'
   const sim = createSim({ speed: Number(params.get('speed')) || 1 })
   sim.connect(user, agent === 'chatgpt' ? 'codex' : agent)
-  store.set(sim.snapshot(user))
+
+  // ?signedout=1 / ?offline=1: the waiting screens (signs in after ?in= seconds).
+  const waitFor = params.get('signedout') ? 'not_signed_in' : params.get('offline') ? 'offline' : null
+  if (waitFor) {
+    const until = Date.now() + (Number(params.get('in')) || 3600) * 1000
+    await firstLoad(async () => {
+      if (Date.now() < until) {
+        unwrap({ error: waitFor === 'offline'
+          ? { code: 'offline', message: "Can't reach yapping on this Mac." }
+          : { code: 'not_signed_in', message: 'Not signed in yet — open https://yap.luqmaan.dev/link?code=WXYZ-1234 to link this Mac to yapping.', data: { url: 'https://yap.luqmaan.dev/link?code=WXYZ-1234', userCode: 'WXYZ-1234' } } })
+      }
+    }, onWaiting)
+  }
+
+  // ?fresh=1: a new account. Contacts exist, no chats yet; a DM appears once
+  // you start one (create_chat), like on a real node.
+  const fresh = params.get('fresh') === '1'
+  const shown = new Set()
+  const snap = () => {
+    const s = sim.snapshot(user)
+    if (!fresh) return s
+    const chats = s.chats.filter((c) => shown.has(c.id))
+    const ids = new Set(chats.map((c) => c.id))
+    const keep = (o) => Object.fromEntries(Object.entries(o).filter(([k, v]) => ids.has(v?.chatId ?? k)))
+    return { ...s, chats, messages: keep(s.messages), assists: keep(s.assists) }
+  }
+  store.set(snap())
   sim.on((ev) => {
     if (!sim.since(user, ev.seq - 1).some((x) => x.seq === ev.seq)) return
+    if (fresh && ev.chatId && !shown.has(ev.chatId)) return
     store.apply(JSON.parse(JSON.stringify(ev)))
   })
+  // DMs with people the sim has no chat with yet: kept here.
+  const extra = {}
+  function dmWith(other) {
+    const s = sim.snapshot(user)
+    let c = extra[other] || (fresh ? null : s.chats.find((x) => x.kind === 'dm' && x.transport === 'yap' && x.members.includes(other)))
+    if (!c) {
+      const u = s.users[other]
+      if (!u || u.bridge) unwrap({ error: { code: 'bad_request', message: 'No such person.' } })
+      c = extra[other] = { id: `new-dm-${other}`, kind: 'dm', title: u.name, transport: 'yap', members: [user, other], sees: { [user]: false }, unread: {} }
+    }
+    if (!shown.has(c.id)) {
+      shown.add(c.id)
+      store.apply({ type: 'chat_update', chatId: c.id, chat: JSON.parse(JSON.stringify(c)) })
+      for (const m of s.messages[c.id] || []) store.apply({ type: 'message', chatId: c.id, message: { ...m } })
+    }
+    return c
+  }
+  const sendExtra = (c, p) => {
+    const message = { id: `m-${Math.random().toString(36).slice(2)}`, chatId: c.id, from: user, kind: 'text', text: p.text, ts: Date.now(), reactions: {}, ...(p.replyTo ? { replyTo: p.replyTo } : {}) }
+    store.apply({ type: 'message', chatId: c.id, message })
+    return { ok: true, message }
+  }
   if (params.get('ambient') !== '0' && !params.get('demo')) setInterval(() => sim.ambient(), 45000)
 
   // A pretend WhatsApp bridge: hands out a QR, then links a while later.
@@ -71,9 +140,26 @@ export async function connectDemo() {
   async function call(method, p = {}) {
     await new Promise((r) => setTimeout(r, 0))
     switch (method) {
-      case 'state': return sim.snapshot(user)
-      case 'sync': return { seq: sim.seq, events: sim.since(user, p.since || 0) }
-      case 'send': return ok(sim.handle(user, { t: 'send', chatId: p.chat, text: p.text, replyTo: p.replyTo, client: agent }))
+      case 'state': return snap()
+      case 'sync': return { seq: sim.seq, events: sim.since(user, p.since || 0).filter((e) => !fresh || !e.chatId || shown.has(e.chatId)) }
+      case 'create_chat': {
+        const others = (p.members || []).filter((x) => x !== user)
+        if (others.length !== 1) unwrap({ error: { code: 'not_supported', message: 'The demo only does one-to-one chats.' } })
+        return { chat: JSON.parse(JSON.stringify(dmWith(others[0]))) }
+      }
+      case 'contacts': return Object.values(sim.snapshot(user).users).filter((u) => u.id !== user)
+      case 'invite': return { code: 'demo', url: 'https://yap.luqmaan.dev/i/demo' }
+      case 'send': {
+        // A chat id, or a person's id (the node starts the DM then).
+        const ex = Object.values(extra).find((x) => x.id === p.chat)
+        if (ex) return sendExtra(ex, p)
+        if (sim.snapshot(user).users[p.chat]) {
+          const c = dmWith(p.chat)
+          if (extra[p.chat]) return sendExtra(c, p)
+          p = { ...p, chat: c.id }
+        }
+        return ok(sim.handle(user, { t: 'send', chatId: p.chat, text: p.text, replyTo: p.replyTo, client: agent }))
+      }
       case 'react': return ok(sim.handle(user, { t: 'react', chatId: p.chat, msgId: p.msgId, emoji: p.emoji }))
       case 'mark_read': return ok(sim.handle(user, { t: 'read', chatId: p.chat }))
       case 'typing': return ok(sim.handle(user, { t: 'typing', chatId: p.chat }))
@@ -101,7 +187,7 @@ export async function connectDemo() {
 }
 
 // ───────────────────────── local: the node on this Mac ─────────────────────────
-export async function connectLocal(cfg) {
+export async function connectLocal(cfg, { onWaiting } = {}) {
   const store = createStore()
   const root = cfg.base || ''
   const headers = { 'content-type': 'application/json', 'x-yap-token': cfg.token || '' }
@@ -115,7 +201,7 @@ export async function connectLocal(cfg) {
     const body = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }))
     return unwrap(res.ok ? body : { error: body?.error || { message: `HTTP ${res.status}` } })
   }
-  store.set(await call('state'))
+  store.set(await firstLoad(() => call('state'), onWaiting))
 
   let syncing = false
   async function catchUp() {
@@ -147,7 +233,7 @@ export async function connectLocal(cfg) {
 }
 
 // ───────────────────────── mcp-app: inside claude.ai, ChatGPT, Codex ─────────────────────────
-export async function connectMcp({ timeout = 2500 } = {}) {
+export async function connectMcp({ timeout = 2500, onWaiting } = {}) {
   const { App, applyHostStyleVariables, applyHostFonts } = await import('@modelcontextprotocol/ext-apps')
   const store = createStore()
   const app = new App({ name: 'yapping', version: '0.1.0' }, {}, { autoResize: true })
@@ -167,9 +253,9 @@ export async function connectMcp({ timeout = 2500 } = {}) {
   await Promise.race([app.connect(), new Promise((_, rej) => setTimeout(() => rej(new Error('no host')), timeout))])
 
   async function call(method, p = {}) {
-    const r = await app.callServerTool({ name: `yap_${method}`, arguments: p })
+    const r = await app.callServerTool({ name: `yap_${method === 'send' ? 'send_own' : method}`, arguments: p })
     const text = r?.content?.find?.((c) => c.type === 'text')?.text
-    if (r?.isError) unwrap({ error: { message: text || 'Something went wrong' } })
+    if (r?.isError) unwrap({ error: { message: text || 'Something went wrong', ...(r.structuredContent?.error && typeof r.structuredContent.error === 'object' ? r.structuredContent.error : {}) } })
     let v = r?.structuredContent
     if (v === undefined && text) { try { v = JSON.parse(text) } catch { v = { value: text } } }
     v = unwrap(v)
@@ -177,7 +263,7 @@ export async function connectMcp({ timeout = 2500 } = {}) {
     return v
   }
 
-  const first = await call('sync', { since: 0 })
+  const first = await firstLoad(() => call('sync', { since: 0 }), onWaiting, { openLink: (url) => app.openLink({ url }) })
   store.set(first.state || first)
 
   // yap_sync every 2s works on every host. Mutations sync straight away.
@@ -223,17 +309,17 @@ export async function connectMcp({ timeout = 2500 } = {}) {
 }
 
 // ───────────────────────── pick ─────────────────────────
-export async function connect() {
+export async function connect(opts = {}) {
   const force = params.get('adapter') || window.__YAP_ADAPTER__
-  if (force === 'demo') return connectDemo()
-  if (force === 'local' || (!force && window.__YAP__)) return connectLocal(window.__YAP__ || {})
+  if (force === 'demo') return connectDemo(opts)
+  if (force === 'local' || (!force && window.__YAP__)) return connectLocal(window.__YAP__ || {}, opts)
   if (force === 'mcp-app' || (!force && window.parent !== window)) {
     try {
-      return await connectMcp()
+      return await connectMcp(opts)
     } catch (e) {
       if (force === 'mcp-app') throw e
       console.warn('[yapping] no MCP host answered, using the demo', e)
     }
   }
-  return connectDemo()
+  return connectDemo(opts)
 }

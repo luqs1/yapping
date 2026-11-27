@@ -239,7 +239,7 @@ function chatsPane() {
   ]
   for (const c of list) items.push([`c:${c.id}`, chatRow(c)])
   if (!list.length) items.push(['empty', `<div class="empty"><p>No chats here.</p></div>`])
-  items.push(['foot', `<div class="list-foot">${I.lock}<span>Your personal messages are end-to-end encrypted and go phone to phone.</span></div>`])
+  items.push(['foot', `<div class="list-foot">${I.lock}<span>Your personal messages are end-to-end encrypted. The relay passes them on but can't read them.</span></div>`])
   return items
 }
 function chatRow(c) {
@@ -352,7 +352,7 @@ function topPill(chat) {
     return `<div class="sysrow col"><div class="encpill">${e2e ? I.lock : ''}<span>${e2e ? `Messages to this chat are end-to-end encrypted by ${esc(b.name)}.` : `Bridged from ${esc(b.name)}.`}</span></div>
       <div class="bridgeline"><span class="bl-ic">${netBadge(chat.transport)}</span>${esc(b.note || '')} <button data-act="invite">Invite to yapping</button></div></div>`
   }
-  return `<div class="sysrow"><div class="encpill">${I.lock}<span>Messages are end-to-end encrypted and go phone to phone. No server in between.</span></div></div>`
+  return `<div class="sysrow"><div class="encpill">${I.lock}<span>Messages are end-to-end encrypted. Our server relays them but can't read them.</span></div></div>`
 }
 function chatItems(chat) {
   const main = S.messages[chat.id] || []
@@ -509,7 +509,7 @@ function renderInfo(v) {
   if (!isDm) items.push(['members', `<div><div class="sec-h">${chat.members.length} members</div><div class="group">${chat.members.map((id) => { const u = S.users[id]; return `<div class="gr mem">${avatar(u, 40)}<span class="gr-main"><b>${id === S.me ? 'You' : esc(u.name)}</b><small>${esc(u.handle || '')}</small></span><span class="mut">${chat.sees?.[id] && u.agent ? harnessSVG(u.agent, 14) : ''}</span></div>` }).join('')}</div></div>`])
   const files = (S.messages[chat.id] || []).filter((m) => m.kind === 'attachment').length
   items.push(['media', `<div class="group"><div class="gr"><span class="gr-main"><b>Media, links and docs</b></span><span class="gr-r"><span class="mut">${files + 9}</span>${I.chevR}</span></div><div class="thumbs"><span class="th t2"><b>demo</b><small>staging</small></span><span class="th t3">🍲</span><span class="th t5"></span><span class="th t4">📅<b>THU</b></span></div></div>`])
-  items.push(['opts', `<div class="group"><div class="gr"><span class="gr-ic tile">${I.bell}</span><span class="gr-main"><b>Notifications</b></span><span class="gr-r">${I.chevR}</span></div><div class="gr"><span class="gr-ic tile">${I.clock}</span><span class="gr-main"><b>Disappearing messages</b></span><span class="gr-r"><span class="mut">Off</span>${I.chevR}</span></div><div class="gr"><span class="gr-ic tile ok">${I.lock}</span><span class="gr-main"><b>Encryption</b><small>${bridged ? (['whatsapp', 'imessage'].includes(chat.transport) ? `end-to-end encrypted by ${esc(S.bridges[chat.transport].name)}` : `not end-to-end encrypted on ${esc(S.bridges[chat.transport].name)}`) : 'end-to-end, phone to phone'}</small></span></div></div>`])
+  items.push(['opts', `<div class="group"><div class="gr"><span class="gr-ic tile">${I.bell}</span><span class="gr-main"><b>Notifications</b></span><span class="gr-r">${I.chevR}</span></div><div class="gr"><span class="gr-ic tile">${I.clock}</span><span class="gr-main"><b>Disappearing messages</b></span><span class="gr-r"><span class="mut">Off</span>${I.chevR}</span></div><div class="gr"><span class="gr-ic tile ok">${I.lock}</span><span class="gr-main"><b>Encryption</b><small>${bridged ? (['whatsapp', 'imessage'].includes(chat.transport) ? `end-to-end encrypted by ${esc(S.bridges[chat.transport].name)}` : `not end-to-end encrypted on ${esc(S.bridges[chat.transport].name)}`) : 'end-to-end; the relay can\'t read them'}</small></span></div></div>`])
   if (isDm && o) items.push(['danger', `<div class="group danger"><div class="gr"><b>Block ${esc(o.name)}</b></div><div class="gr"><b>Report ${esc(o.name)}</b></div></div>`])
   items.push(['pad', '<div class="padb"></div>'])
   morph($('.info-body', node), items)
