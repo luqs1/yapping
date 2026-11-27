@@ -119,7 +119,7 @@ export function registerTools(pi: ExtensionAPI, yap: YapClient) {
 			if (!chat) throw new Error(`No yapping chat matches "${params.to}". Chats: ${listChats(state)}`);
 			const body = String(params.text ?? "");
 			if (!body.trim()) throw new Error("Empty message");
-			const res = await yap.action({ t: "send", chatId: chat.id, text: body }, signal);
+			const res = await yap.action({ t: "send", chatId: chat.id, text: body, agent: true }, signal);
 			return text(`Sent to ${chatTitle(state, chat)} [${chat.id}] via ${sourceOf(yap, chat)}: "${body}"`, { chatId: chat.id, messageId: res?.message?.id, text: body });
 		},
 	});

@@ -4,6 +4,29 @@
 // shared reducer (shared/sim.js#applyEvent). Tools fall back to plain HTTP so they
 // also work in print/json/rpc mode where we never open a socket.
 
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+// The relay when asked for, else this Mac's node: its URL and the token it
+// wrote for local clients.
+export function where(env: Record<string, string | undefined>): { relay?: string; node?: string; token?: string } {
+	if (env.YAP_RELAY) return { relay: env.YAP_RELAY };
+	const home = env.YAP_HOME || join(homedir(), ".yapping");
+	const read = (f: string) => {
+		try {
+			return readFileSync(join(home, f), "utf8");
+		} catch {
+			return "";
+		}
+	};
+	let port = 7790;
+	try {
+		port = Number(JSON.parse(read("api.json")).port) || 7790;
+	} catch {}
+	return { node: (env.YAP_NODE || `http://127.0.0.1:${port}`).replace(/\/$/, ""), token: read("local-token").trim() };
+}
+
 export type Sim = {
 	applyEvent: (state: any, ev: any) => any;
 	HARNESSES: Record<string, { name: string; color: string }>;
@@ -25,9 +48,38 @@ export async function loadSim(): Promise<Sim> {
 }
 
 export interface YapOptions {
-	relay: string; // http://localhost:7788
-	user: string; // luqmaan
+	/** The demo relay (http://localhost:7788). Unset: talk to the yapping node on this Mac. */
+	relay?: string;
+	/** The node's local API (http://127.0.0.1:7790) and its token, when not using the relay. */
+	node?: string;
+	token?: string;
+	user: string; // luqmaan (relay only; a node knows who you are)
 	client: string; // pi
+}
+
+// The relay speaks sim.js actions; the node speaks RPC. Same shapes otherwise:
+// the node's `state` is a sim snapshot and its events fold in with applyEvent.
+function toRpc(a: Record<string, any>): [string, Record<string, unknown>] | null {
+	switch (a.t) {
+		case "send":
+			return ["send", { chat: a.chatId, text: a.text, ...(a.replyTo ? { replyTo: a.replyTo } : {}), ...(a.agent ? { agent: true } : {}) }];
+		case "read":
+			return ["mark_read", { chat: a.chatId }];
+		case "react":
+			return ["react", { chat: a.chatId, msgId: a.msgId, emoji: a.emoji }];
+		case "typing":
+			return ["typing", { chat: a.chatId }];
+		case "set_sees":
+			return ["set_sees", { chat: a.chatId, on: !!a.on }];
+		case "approve":
+			return ["approve", { id: a.assistId }];
+		case "dismiss":
+			return ["dismiss", { id: a.assistId }];
+		case "invite_p2p":
+			return ["invite", {}];
+		default:
+			return null;
+	}
 }
 
 type Listener = (state: any, ev: any) => void;
@@ -47,7 +99,28 @@ export class YapClient {
 	) {}
 
 	get user() {
-		return this.opts.user;
+		return this.state?.me ?? this.opts.user;
+	}
+
+	/** Where we're talking to, for messages: the relay or the node. */
+	get where() {
+		return this.opts.relay ? `relay ${this.opts.relay}` : `yapping on this Mac (${this.opts.node})`;
+	}
+
+	private get viaNode() {
+		return !this.opts.relay;
+	}
+
+	private async rpc(method: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<any> {
+		const res = await fetch(`${this.opts.node}/rpc`, {
+			method: "POST",
+			headers: { "content-type": "application/json", "x-yap-token": this.opts.token ?? "" },
+			body: JSON.stringify({ method, params: { ...params, harness: this.opts.client } }),
+			signal: signal ?? AbortSignal.timeout(6000),
+		});
+		const out: any = await res.json().catch(() => ({}));
+		if (!res.ok || out?.error) throw new Error(out?.error?.message || `yapping node ${res.status}`);
+		return out.result;
 	}
 
 	subscribe(fn: Listener) {
@@ -70,6 +143,11 @@ export class YapClient {
 	}
 
 	async snapshot(signal?: AbortSignal): Promise<any> {
+		if (this.viaNode) {
+			const s = await this.rpc("state", {}, signal);
+			s.typing ||= {};
+			return s;
+		}
 		const res = await fetch(this.url("/api/snapshot"), { signal: signal ?? AbortSignal.timeout(4000) });
 		if (!res.ok) throw new Error(`relay ${res.status} on /api/snapshot`);
 		const s = await res.json();
@@ -84,6 +162,11 @@ export class YapClient {
 	}
 
 	async action(action: Record<string, unknown>, signal?: AbortSignal): Promise<any> {
+		if (this.viaNode) {
+			const call = toRpc(action);
+			if (!call) throw new Error(`yapping: ${String(action.t)} isn't something the node does`);
+			return this.rpc(call[0], call[1], signal);
+		}
 		const res = await fetch(this.url("/api/action"), {
 			method: "POST",
 			headers: { "content-type": "application/json" },
@@ -98,7 +181,8 @@ export class YapClient {
 
 	/** Fire-and-forget over the socket when live (cheap), HTTP otherwise. */
 	send(action: Record<string, unknown>) {
-		if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify({ ...action, client: this.opts.client }));
+		if (this.viaNode) return void this.action(action).catch(() => {});
+		if (this.ws &&this.ws.readyState === 1) this.ws.send(JSON.stringify({ ...action, client: this.opts.client }));
 		else this.action(action).catch(() => {});
 	}
 
@@ -113,6 +197,8 @@ export class YapClient {
 		this.stopped = true;
 		if (this.retryTimer) clearTimeout(this.retryTimer);
 		this.retryTimer = null;
+		this.sse?.abort();
+		this.sse = null;
 		try {
 			this.ws?.close();
 		} catch {}
@@ -120,8 +206,60 @@ export class YapClient {
 		this.mode = "idle";
 	}
 
+	// The node: a snapshot, then its server-sent events from that snapshot's seq,
+	// so nothing falls in the gap. Reconnects with the same backoff.
+	private sse: AbortController | null = null;
+	private async openNode() {
+		this.mode = "connecting";
+		const ctl = new AbortController();
+		this.sse = ctl;
+		try {
+			const state = await this.snapshot();
+			if (ctl.signal.aborted) return;
+			this.state = state;
+			this.mode = "live";
+			this.retry = 0;
+			this.fire({ type: "snapshot" });
+			const res = await fetch(`${this.opts.node}/events?since=${state.seq ?? 0}`, { headers: { "x-yap-token": this.opts.token ?? "" }, signal: ctl.signal });
+			if (!res.ok || !res.body) throw new Error(`events ${res.status}`);
+			const reader = res.body.getReader();
+			const dec = new TextDecoder();
+			let buf = "";
+			for (;;) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				buf += dec.decode(value, { stream: true });
+				let i: number;
+				while ((i = buf.indexOf("\n\n")) >= 0) {
+					const frame = buf.slice(0, i);
+					buf = buf.slice(i + 2);
+					const data = frame.split("\n").filter((l) => l.startsWith("data: ")).map((l) => l.slice(6)).join("\n");
+					if (!data || !this.state) continue;
+					let ev: any;
+					try {
+						ev = JSON.parse(data);
+					} catch {
+						continue;
+					}
+					const before = this.state.seq;
+					this.sim.applyEvent(this.state, ev);
+					if (this.state.seq !== before || !ev.seq) this.fire(ev);
+				}
+			}
+		} catch {
+			// fall through to reconnect
+		}
+		if (this.sse !== ctl || ctl.signal.aborted) return;
+		this.sse = null;
+		const wasLive = this.mode === "live";
+		this.mode = "offline";
+		if (wasLive) this.fire({ type: "disconnected" });
+		this.schedule();
+	}
+
 	private open() {
 		if (this.stopped) return;
+		if (this.viaNode) return void this.openNode();
 		if (typeof WebSocket === "undefined") {
 			this.mode = "offline";
 			return;
@@ -247,7 +385,9 @@ export function ago(ts: number) {
 export function presence(state: any, sim: Sim, user: any): string {
 	if (!user) return "";
 	if (user.bridge) return `on ${sim.BRIDGES[user.bridge]?.name ?? user.bridge}`;
+	// A real node may not know which harness someone is in yet: say what we know.
 	const h = sim.HARNESSES[user.harness]?.name ?? user.harness;
+	if (!h) return user.status === "online" ? "online" : "away";
 	return user.status === "online" ? `in ${h}` : `away · usually in ${h}`;
 }
 

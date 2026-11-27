@@ -1,8 +1,12 @@
 // Shared by the server plugin (agent tools) and the TUI plugin (sidebar/route).
-// Talks to the yapping relay over plain HTTP/WebSocket and folds events with
-// the same reducer every yapping client uses (lib/sim.js is a copy of
-// shared/sim.js so the plugin folder is self-contained).
+// Talks to the yapping node on this Mac (its local API) by default, or to the
+// demo relay when YAP_RELAY is set, and folds events with the same reducer
+// every yapping client uses (lib/sim.js is a copy of shared/sim.js so the
+// plugin folder is self-contained).
 
+import { readFileSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
 // @ts-ignore -- plain ESM, no types
 import { applyEvent, helpers, HARNESSES, BRIDGES } from "./sim.js"
 
@@ -60,15 +64,100 @@ export type State = {
   typing?: Record<string, Record<string, number>>
 }
 
-export type YapOptions = { relay?: string; user?: string }
+export type YapOptions = { relay?: string; user?: string; node?: string; home?: string }
 
 export function settings(options: YapOptions = {}) {
-  const relay = (options.relay || process.env.YAP_RELAY || "http://localhost:7788").replace(/\/$/, "")
+  const relay = (options.relay || process.env.YAP_RELAY || "").replace(/\/$/, "")
   const user = options.user || process.env.YAP_USER || "luqmaan"
   return { relay, user }
 }
 
+/** A socket-shaped live feed, so the TUI doesn't care which one it has. */
+export type Feed = { onopen?: () => void; onmessage?: (e: { data: string }) => void; onclose?: () => void; onerror?: () => void; close(): void }
+
+/** The relay when asked for (YAP_RELAY or `relay`), else this Mac's yapping node. */
 export function relayClient(options: YapOptions = {}) {
+  return settings(options).relay ? relayOnly(options) : nodeClient(options)
+}
+
+// The relay speaks sim.js actions; the node speaks RPC with the same shapes.
+function toRpc(a: Record<string, any>): [string, Record<string, unknown>] | null {
+  switch (a.t) {
+    case "send": return ["send", { chat: a.chatId, text: a.text, ...(a.replyTo ? { replyTo: a.replyTo } : {}), ...(a.agent ? { agent: true } : {}) }]
+    case "read": return ["mark_read", { chat: a.chatId }]
+    case "react": return ["react", { chat: a.chatId, msgId: a.msgId, emoji: a.emoji }]
+    case "typing": return ["typing", { chat: a.chatId }]
+    case "set_sees": return ["set_sees", { chat: a.chatId, on: !!a.on }]
+    case "approve": return ["approve", { id: a.assistId }]
+    case "dismiss": return ["dismiss", { id: a.assistId }]
+    case "invite_p2p": return ["invite", {}]
+    default: return null
+  }
+}
+
+export function nodeClient(options: YapOptions = {}) {
+  const home = options.home || process.env.YAP_HOME || join(homedir(), ".yapping")
+  const read = (f: string) => { try { return readFileSync(join(home, f), "utf8") } catch { return "" } }
+  let port = 7790
+  try { port = Number(JSON.parse(read("api.json")).port) || 7790 } catch {}
+  const node = (options.node || process.env.YAP_NODE || `http://127.0.0.1:${port}`).replace(/\/$/, "")
+  const token = () => read("local-token").trim()
+  const rpc = async (method: string, params: Record<string, unknown> = {}) => {
+    const res = await fetch(`${node}/rpc`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-yap-token": token() },
+      body: JSON.stringify({ method, params: { ...params, harness: LOCAL } }),
+    })
+    const out: any = await res.json().catch(() => ({}))
+    if (!res.ok || out?.error) throw new Error(out?.error?.message || `yapping node → HTTP ${res.status}`)
+    return out.result
+  }
+  // A snapshot, then the node's events from its seq: delivered like socket messages.
+  const connect = (): Feed => {
+    const ctl = new AbortController()
+    const feed: Feed = { close: () => { ctl.abort(); feed.onclose?.() } }
+    ;(async () => {
+      try {
+        const state = await rpc("state")
+        state.typing ||= {}
+        feed.onopen?.()
+        feed.onmessage?.({ data: JSON.stringify({ type: "snapshot", state }) })
+        const res = await fetch(`${node}/events?since=${state.seq ?? 0}`, { headers: { "x-yap-token": token() }, signal: ctl.signal })
+        if (!res.ok || !res.body) throw new Error(`events ${res.status}`)
+        const reader = res.body.getReader()
+        const dec = new TextDecoder()
+        let buf = ""
+        for (;;) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += dec.decode(value, { stream: true })
+          let i: number
+          while ((i = buf.indexOf("\n\n")) >= 0) {
+            const data = buf.slice(0, i).split("\n").filter((l) => l.startsWith("data: ")).map((l) => l.slice(6)).join("\n")
+            buf = buf.slice(i + 2)
+            if (data) feed.onmessage?.({ data })
+          }
+        }
+      } catch {}
+      if (!ctl.signal.aborted) { ctl.abort(); feed.onclose?.() }
+    })()
+    return feed
+  }
+  return {
+    relay: `yapping on this Mac (${node})`,
+    user: "",
+    connect,
+    snapshot: async (): Promise<State> => { const s = await rpc("state"); s.typing ||= {}; return s },
+    action: async (action: Record<string, unknown>) => {
+      const call = toRpc(action)
+      if (!call) return { error: `${String(action.t)} isn't something the node does` }
+      return rpc(call[0], call[1])
+    },
+    presence: async (_status: "online" | "offline", _client = LOCAL) => ({ ok: true }), // the node keeps its own presence
+  }
+}
+
+function relayOnly(options: YapOptions = {}) {
   const { relay, user } = settings(options)
   const q = `user=${encodeURIComponent(user)}`
   const call = async (path: string, init?: RequestInit) => {
@@ -81,7 +170,7 @@ export function relayClient(options: YapOptions = {}) {
   return {
     relay,
     user,
-    wsUrl: (client: string) => `${relay.replace(/^http/, "ws")}/ws?${q}&client=${encodeURIComponent(client)}`,
+    connect: (client: string): Feed => new WebSocket(`${relay.replace(/^http/, "ws")}/ws?${q}&client=${encodeURIComponent(client)}`) as unknown as Feed,
     snapshot: (): Promise<State> => call(`/api/snapshot?${q}`),
     action: (action: Record<string, unknown>) => post(`/api/action?${q}`, action),
     presence: (status: "online" | "offline", client = LOCAL) => post(`/api/presence?${q}`, { status, client }),
@@ -136,6 +225,8 @@ export function presence(state: State, chat: Chat) {
   const other = helpers.otherPerson(state, chat)
   if (!other) return ""
   if (other.bridge) return `on ${bridgeName(other.bridge)}`
+  // A real node may not know which harness someone is in yet: say what we know.
+  if (!other.harness) return other.status === "online" ? "online" : "away"
   const h = harnessName(other.harness)
   return other.status === "online" ? `in ${h}` : `away · usually ${h}`
 }

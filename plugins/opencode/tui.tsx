@@ -33,6 +33,7 @@ import {
   pending,
   presence,
   relayClient,
+  type Feed,
   resolveChat,
   sees,
   sortedChats,
@@ -90,14 +91,14 @@ export default {
     const settledAt = new Map<string, number>() // assist id → when we saw it finish
     const toasted = new Set<string>()
 
-    // ── relay connection ─────────────────────────────────────────────────
-    let ws: WebSocket | undefined
+    // ── live connection (node or relay) ─────────────────────────────────────────────────
+    let ws: Feed | undefined
     let disposed = false
     let retry = 500
     const connect = () => {
       if (disposed) return
       try {
-        ws = new WebSocket(yap.wsUrl(LOCAL))
+        ws = yap.connect(LOCAL)
       } catch {
         return schedule()
       }
@@ -295,7 +296,7 @@ export default {
               slash: { name: "yap-send", arguments: true },
               async run(raw?: string) {
                 const s = store.s
-                if (!s) return ctx.ui.toast.show({ variant: "warning", message: `yapping relay offline (${yap.relay})` })
+                if (!s) return ctx.ui.toast.show({ variant: "warning", message: `Can't reach ${yap.relay}` })
                 let text = (raw ?? "").trim()
                 if (!text) text = (await ctx.ui.dialog.prompt({ title: "yap-send", placeholder: "finn running late, sorry!" })) ?? ""
                 const [who, ...rest] = text.trim().split(/\s+/)
@@ -702,7 +703,7 @@ export default {
             fallback={
               <box padding={2}>
                 <text fg={PH.gray}>
-                  {store.mode === "offline" ? `Can't reach the yapping relay at ${yap.relay}.` : "Connecting to yapping…"}
+                  {store.mode === "offline" ? `Can't reach ${yap.relay}. Is yapping running? Try: yap service install` : "Connecting to yapping…"}
                 </text>
               </box>
             }

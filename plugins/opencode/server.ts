@@ -83,7 +83,7 @@ export default {
     const snapshot = async (): Promise<State | string> =>
       yap.snapshot().catch(
         (err: unknown) =>
-          `The yapping relay at ${yap.relay} is not reachable (${err instanceof Error ? err.message : String(err)}).`,
+          `${yap.relay} is not reachable (${err instanceof Error ? err.message : String(err)}).`,
       )
 
     await ctx.tool.transform((tools) => {
@@ -158,7 +158,7 @@ export default {
           const text = String(input.text ?? "").trim()
           if (!text) return { content: "Refusing to send an empty message." }
           await context?.progress?.({ title: `yapping → ${chatTitle(state, chat)}` }).catch(() => {})
-          const res = await yap.action({ t: "send", chatId: chat.id, text, client: LOCAL }).catch((err) => ({ error: String(err) }))
+          const res = await yap.action({ t: "send", chatId: chat.id, text, client: LOCAL, agent: true }).catch((err) => ({ error: String(err) }))
           if (res?.error) return { content: `Send failed: ${res.error}` }
           const via = chat.transport === "yap" ? "" : ` via ${bridgeName(chat.transport)}`
           return {

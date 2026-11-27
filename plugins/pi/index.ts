@@ -4,19 +4,22 @@
 //   /yap [who]   or  ctrl+q          # Discord-styled chat view (esc closes)
 //   "tell Finn I'm running late"     # the agent uses yap_send (your exact words)
 //
-// Env: YAP_RELAY (default http://localhost:7788), YAP_USER (default luqmaan),
+// Talks to the yapping node on this Mac by default (its port from
+// ~/.yapping/api.json, its token from ~/.yapping/local-token).
+// Env: YAP_HOME (the node's folder), YAP_NODE (its URL), YAP_RELAY (use the demo
+//      relay instead, e.g. http://localhost:7788) with YAP_USER (default luqmaan),
 //      YAP_KEY (default ctrl+q), YAP_REDUCED_MOTION=1, YAP_NOTIFY=0.
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, type TUI, visibleWidth } from "@earendil-works/pi-tui";
-import { canSee, chatTitle, loadSim, messageText, pendingAssists, resolveChat, totalUnread, YapClient } from "./client.ts";
+import { canSee, chatTitle, loadSim, messageText, pendingAssists, resolveChat, totalUnread, where, YapClient } from "./client.ts";
 import { registerTools } from "./tools.ts";
 import { C, bg, chibi, fill, paint, YapView } from "./view.ts";
 
 export default async function yapping(pi: ExtensionAPI) {
 	const sim = await loadSim();
 	const env = process.env;
-	const yap = new YapClient({ relay: env.YAP_RELAY || "http://localhost:7788", user: env.YAP_USER || "luqmaan", client: "pi" }, sim);
+	const yap = new YapClient({ ...where(env), user: env.YAP_USER || "luqmaan", client: "pi" }, sim);
 	const KEY = (env.YAP_KEY || "ctrl+q") as any;
 	const reducedMotion = env.YAP_REDUCED_MOTION === "1";
 
@@ -73,7 +76,7 @@ export default async function yapping(pi: ExtensionAPI) {
 		const head = `${paint(C.blurple, "▌")}${paint(C.white, "\x1b[1m yap \x1b[22m")}`;
 		const key = paint(C.dim, `/yap · ${KEY} `);
 		if (!s) {
-			const t = `${head} ${paint(C.muted, yap.mode === "offline" ? `relay offline (${yap.opts.relay})` : "connecting…")}`;
+			const t = `${head} ${paint(C.muted, yap.mode === "offline" ? `offline: can't reach ${yap.where}` : "connecting…")}`;
 			return fill(t + " ".repeat(Math.max(1, width - visibleWidth(t) - visibleWidth(key))) + key, width, C.side);
 		}
 		const n = totalUnread(s);

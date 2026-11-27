@@ -27,12 +27,12 @@ const jiti = createJiti(import.meta.url, {
 const cols = Number(process.argv[2] || 160);
 const rows = Number(process.argv[3] || 46);
 const chat = process.argv[4];
-const { YapClient, loadSim } = await jiti.import(join(here, "..", "client.ts"));
+const { YapClient, loadSim, where } = await jiti.import(join(here, "..", "client.ts"));
 const { YapView } = await jiti.import(join(here, "..", "view.ts"));
 const { visibleWidth } = await jiti.import("@earendil-works/pi-tui");
 
 const sim = await loadSim();
-const yap = new YapClient({ relay: process.env.YAP_RELAY || "http://localhost:7788", user: process.env.YAP_USER || "luqmaan", client: "pi" }, sim);
+const yap = new YapClient({ ...where(process.env), user: process.env.YAP_USER || "luqmaan", client: "pi" }, sim);
 yap.state = await yap.snapshot();
 yap.mode = "live";
 yap.send = () => {}; // read-only check: never write to the relay

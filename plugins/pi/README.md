@@ -20,8 +20,9 @@ To try it for one run without installing anything:
 pi -e ./plugins/pi
 ```
 
-You also need a relay. The demo relay lives in this repo: `bun relay/server.ts`, which serves
-`http://localhost:7788`.
+It talks to yapping on this Mac (install it with `curl -fsSL https://yap.luqmaan.dev/install.sh | sh`),
+finding the node's port and token in its folder by itself. For the demo world instead, run the demo relay
+(`bun relay/server.ts`) and start pi with `YAP_RELAY=http://localhost:7788`.
 
 ## Use it
 

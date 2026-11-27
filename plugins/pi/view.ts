@@ -388,8 +388,10 @@ export class YapView implements Component, Focusable {
 	private renderEmpty(width: number, H: number) {
 		const msg =
 			this.yap.mode === "offline"
-				? `relay offline at ${this.yap.opts.relay} — start it: bun relay/server.ts  (retrying…)`
-				: `connecting to ${this.yap.opts.relay} as @${this.yap.user}…`;
+				? this.yap.opts.relay
+					? `relay offline at ${this.yap.opts.relay} — start it: bun relay/server.ts  (retrying…)`
+					: `yapping isn't running on this Mac — start it: yap service install  (retrying…)`
+				: `connecting to ${this.yap.where}…`;
 		const lines: string[] = [];
 		for (let r = 0; r < H; r++) {
 			const t = r === Math.floor(H / 2) - 1 ? paint(C.header, bold(center("yapping", width))) : r === Math.floor(H / 2) ? paint(C.muted, center(msg, width)) : r === H - 1 ? paint(C.dim, " esc close") : "";

@@ -12,8 +12,9 @@ opencode plugin add opencode-yapping
 
 Then open opencode and type `/yap` (or press `ctrl+x` then `p`).
 
-> Needs opencode 2.x and a yapping relay. The demo relay runs at `http://localhost:7788`
-> (`bun relay/server.ts` in this repo). To use another one, set `YAP_RELAY=https://…` and `YAP_USER=yourname`.
+> Needs opencode 2.x and yapping on this Mac (`curl -fsSL https://yap.luqmaan.dev/install.sh | sh`); the
+> plugin finds the node's port and token by itself. For the demo world instead, run `bun relay/server.ts` in
+> this repo and set `YAP_RELAY=http://localhost:7788` (and `YAP_USER=yourname`).
 
 ## What you get
 
