@@ -103,7 +103,7 @@ test('Claude reads, sends and proposes through the node', async ($, on) => {
   await $.tool.call({ tool: 'mcp__yapping__yap_read', chat: 'Mum' } as any)
   expect(sent).toContainEqual(call('read', { chat: 'Mum', limit: 15 }))
   await $.tool.call({ tool: 'mcp__yapping__yap_send', chat: 'Finn', text: 'running 5 late' } as any)
-  expect(sent).toContainEqual(call('send', { chat: 'Finn', text: 'running 5 late' }))
+  expect(sent).toContainEqual(call('send', { chat: 'Finn', text: 'running 5 late', agent: true }))
   await $.tool.call({ tool: 'mcp__yapping__yap_propose', chat: 'Finn', label: 'Send Finn the deck?', payload: { kind: 'file', title: 'deck.pdf' } } as any)
   expect(sent.some(s => s.method === 'propose' && s.params.label === 'Send Finn the deck?')).toBe(true)
 })

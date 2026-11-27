@@ -9,7 +9,10 @@ export type User = {
   bridge?: string | null
 }
 
-export type Attachment = { type: 'link' | 'file' | 'event'; title: string; subtitle?: string; url?: string }
+// What a proposal sends once the person presses Send.
+export type Payload = { kind: 'text' | 'link' | 'file' | 'event'; text?: string; title?: string; subtitle?: string; url?: string }
+
+export type Attachment ={ type: 'link' | 'file' | 'event'; title: string; subtitle?: string; url?: string }
 
 export type Msg = {
   id: string
@@ -45,7 +48,7 @@ export type Assist = {
   agents: AgentRef[]
   state: 'reading' | 'waiting' | 'talking' | 'working' | 'ready' | 'done' | 'dismissed'
   line: string
-  proposal?: { label: string; detail?: string; action: string }
+  proposal?: { label: string; detail?: string; action: string; payload?: Payload }
   log: { who: 'mine' | 'them'; text: string; at: number }[]
   startedAt: number
 }
@@ -69,6 +72,7 @@ declare module 'claude-code' {
       view: Shaped<View>
       tick: number
       live: boolean
+      closed: boolean
     }
   }
 }

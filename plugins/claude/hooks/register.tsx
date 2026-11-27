@@ -6,7 +6,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Assist, Chat, Msg, Snap, User, View } from '../types'
+import type { Assist, Chat, Msg, Payload, Snap, User, View } from '../types'
 import { chibi } from './chibi'
 
 const PANE = 'yapping'
@@ -14,6 +14,15 @@ const snapA = atom({ plugin: 'yapping', key: 'snap' } as const, null, { shape: '
 const viewA = atom({ plugin: 'yapping', key: 'view' } as const, { chat: null, open: [], band: null }, { shape: 'view-2' })
 const tickA = atom({ plugin: 'yapping', key: 'tick' } as const, 0)
 const liveA = atom({ plugin: 'yapping', key: 'live' } as const, false)
+// The person closed the pane: it stays closed this session until /yap.
+const closedA = atom({ plugin: 'yapping', key: 'closed' } as const, false)
+// The node's home (~/.yapping: messages, keys, the local API token) and its
+// local API port. ~/repos/yapping (no dot) is code, not data, and stays open.
+const PRIVATE_PATH = /(^|[\s"'=/~])\.yapping(\/|\b)|local-token|node\.db/
+// The node's local API ports (7790 and the next few it falls back to); the demo
+// relay on 7788 holds no one's real chats and stays open.
+const NODE_URL = /https?:\/\/(127\.0\.0\.1|localhost|\[::1\]):779\d\b/
+const TAGLINE ='Chat with people here. Claude helps only in chats you switch on, and sends nothing without you.'
 
 const ACTIVE = ['reading', 'waiting', 'talking', 'working']
 const ATTACH_ICON: Record<string, string> = { link: '🔗', file: '📄', event: '📅' }
@@ -157,13 +166,37 @@ async function answer($: $, method: string, params: Record<string, unknown>) {
   }
 }
 
+// Contacts on yapping you have no DM with yet: tapping one starts it.
+function people(snap: Snap): User[] {
+  const withDm = new Set(snap.chats.filter(c => c.kind === 'dm').flatMap(c => c.members))
+  return Object.values(snap.users)
+    .filter(u => u.id !== snap.me && !u.bridge && !withDm.has(u.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// The node makes (or finds) the DM; the pane then opens it on the composer.
+async function startChat($: $, userId: string) {
+  try {
+    const out = await rpc($, 'create_chat', { members: [userId] })
+    await select($, out?.chat?.id ?? null)
+  } catch {
+    await offlineNotice($)
+  }
+}
+
 async function toggle($: $, id: string) {
   await update($, viewA, v => ({ ...v, open: v.open.includes(id) ? v.open.filter(x => x !== id) : [...v.open, id] }))
 }
 
 async function openPane($: $, chatId?: string) {
   if (chatId) await select($, chatId)
-  await $.ui.open({ id: PANE, title: 'Chats', focus: true, columns: 52 })
+  await update($, closedA, () => false)
+  await $.ui.open({ id: PANE, title: 'yapping', focus: true, closeOnEscape: true, columns: 52 })
+}
+
+async function closePane($: $) {
+  await update($, closedA, () => true)
+  await $.ui.close({ id: PANE }).catch(() => {})
 }
 
 function resolveChat(snap: Snap | null, q: string): Chat | undefined {
@@ -219,13 +252,22 @@ export const register: Register = (on, options) => {
       },
       isDeferred: false,
     })
-    await refresh($).catch(() => update($, liveA, () => false))
+    const snap = await refresh($).catch(() => { void update($, liveA, () => false); return null })
     $.clock.every(1500, () => void poll($))
     $.clock.every(400, async () => {
       const snap = await read($, snapA)
       if (snap?.assists.some(a => ACTIVE.includes(a.state))) await update($, tickA, t => (t + 1) % 1000)
     })
-    void $.ui.open({ id: PANE, title: 'Chats', columns: 52 })
+    // Open on its own only when something is waiting, and never once the
+    // person has closed it this session (a reload runs this again).
+    if (snap && (unreadOf(snap) || readyOf(snap).length) && !(await read($, closedA))) {
+      void $.ui.open({ id: PANE, title: 'yapping', closeOnEscape: true, columns: 52 })
+    }
+    return next(e)
+  })
+
+  on('ui.close', async ($, e, next) => {
+    if (e.id === PANE && e.origin.kind === 'person') await update($, closedA, () => true)
     return next(e)
   })
 
@@ -243,7 +285,7 @@ export const register: Register = (on, options) => {
   })
   on('tool.call', { tool: 'mcp__yapping__yap_send' }, async ($, e) => {
     const input = e as unknown as { chat: string; text: string }
-    const out = await answer($, 'send', { chat: input.chat, text: input.text })
+    const out = await answer($, 'send', { chat: input.chat, text: input.text, agent: true })
     await refresh($).catch(() => {})
     return out
   })
@@ -254,6 +296,23 @@ export const register: Register = (on, options) => {
     await refresh($).catch(() => {})
     return out
   })
+
+  // ── keep Claude's own tools out of the node's store ─────────────────
+  // "Hidden from Claude" means more than the yap_* tools refusing: Claude's
+  // shell and file tools mustn't reach the messages, keys or local API token
+  // behind them either. A best-effort wall, not a sandbox.
+  // Only where a call reaches (a path, a shell command), never what it
+  // writes: source code that mentions the node's address is fine.
+  const DENY = { deny: "yapping: your chats on this Mac are private. Use the yap_* tools, which only open chats the person has let Claude see." }
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) =>
+    PRIVATE_PATH.test(e.command) || NODE_URL.test(e.command) ? DENY : next(e))
+  for (const tool of ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'NotebookEdit'] as const) {
+    on('tool.call', { tool }, async ($, e, next) => {
+      const where = e as unknown as { file_path?: string; path?: string; notebook_path?: string; pattern?: string }
+      const paths = [where.file_path, where.path, where.notebook_path, tool === 'Glob' ? where.pattern : undefined]
+      return paths.some(p => typeof p === 'string' && PRIVATE_PATH.test(p)) ? DENY : next(e)
+    })
+  }
 
   // ── the reply band above the prompt: new messages from people only ──
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -290,9 +349,9 @@ export const register: Register = (on, options) => {
     const live = await read($, liveA)
     const els = $.ui.resolve(e) as any
     const ctx: Ctx = { els, snap, view, tick, live, isTerminal: e.surface === 'terminal', hasSvg: e.surface !== 'terminal' && !!els.Svg }
-    if (!snap) return offline(ctx)
-    const chat = view.chat ? snap.chats.find(c => c.id === view.chat) : undefined
-    return chat ? conversation($, ctx, snap, chat) : inbox($, ctx, snap)
+    const chat = snap && view.chat ? snap.chats.find(c => c.id === view.chat) : undefined
+    const body = !snap ? offline(ctx) : chat ? conversation($, ctx, snap, chat) : inbox($, ctx, snap)
+    return frame($, ctx, body, !chat)
   })
 }
 
@@ -310,13 +369,49 @@ function glyph(state: string, tick: number) {
   return `✳${eyes}`
 }
 
+// The pane's own header: the app draws no title for a lone pane, so name it,
+// say what it is for, and give it a way out.
+function frame($: $, ctx: Ctx, body: any, withTagline: boolean) {
+  const { Box, Text, Button } = ctx.els
+  return (
+    <Box flexDirection="column" gap={ctx.isTerminal ? 0 : 'sm'}>
+      <Box flexDirection="row" alignItems="center" gap={1}>
+        <Text color="claude" bold>✳</Text>
+        <Box flexGrow={1} flexShrink={1}><Text bold>yapping</Text></Box>
+        <Button key="pane-close" label="×" plain onPress={() => closePane($)} />
+      </Box>
+      {withTagline ? <Text dimColor>{TAGLINE}</Text> : null}
+      {body}
+    </Box>
+  )
+}
+
 function offline(ctx: Ctx) {
   const { Box, Text } = ctx.els
   return (
     <Box flexDirection="column" gap={1} padding={1}>
-      <Text bold>Chats are offline</Text>
-      <Text dimColor>Start the relay and they'll come back:</Text>
-      <Text color="claude">bun ~/repos/yapping/relay/server.ts</Text>
+      <Text bold>yapping isn't running on this Mac</Text>
+      <Text dimColor>Start it, and sign in if you haven't yet:</Text>
+      <Text color="claude">yap service install</Text>
+      <Text color="claude">yap login</Text>
+    </Box>
+  )
+}
+
+// Exactly what Send will send, so nothing goes out unseen.
+function preview(ctx: Ctx, p: Payload | undefined) {
+  const { Box, Text } = ctx.els
+  if (!p) return null
+  const lines =
+    p.kind === 'text' ? [p.text ?? ''] :
+    p.kind === 'link' ? [p.title ?? '', p.url ?? ''] :
+    [p.title ?? '', p.subtitle ?? '']
+  const shown = lines.filter(Boolean)
+  if (!shown.length) return null
+  return (
+    <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor="inactive">
+      <Text dimColor>{p.kind === 'text' ? 'Will send' : `Will send this ${p.kind}`}</Text>
+      {shown.map((l, i) => <Text key={`pv-${i}`} bold={i === 0 && p.kind !== 'text'}>{l}</Text>)}
     </Box>
   )
 }
@@ -324,8 +419,38 @@ function offline(ctx: Ctx) {
 function inbox($: $, ctx: Ctx, snap: Snap) {
   const { Box, Text, Button, Svg } = ctx.els
   const chats = [...snap.chats].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (snap.messages[b.id]?.at(-1)?.ts ?? 0) - (snap.messages[a.id]?.at(-1)?.ts ?? 0))
+  const fresh = people(snap)
+  // No chats and no one to start one with: an empty tree counts as not drawn,
+  // so say so and offer an invite.
+  if (!chats.length && !fresh.length) {
+    return (
+      <Box flexDirection="column" gap={1} padding={1}>
+        <Text bold>No chats yet</Text>
+        <Text dimColor>Invite someone and your chat with them shows up here.</Text>
+        <Button key="invite-first" label="Copy an invite link" variant="primary" onPress={() => invite($, ctx.isTerminal ? 'terminal' : 'desktop')} />
+        {ctx.live ? null : <Text dimColor>offline: showing what you had</Text>}
+      </Box>
+    )
+  }
   return (
     <Box flexDirection="column" gap={ctx.isTerminal ? 0 : 'xs'}>
+      {fresh.length ? (
+        <Box key="people" flexDirection="column" gap={ctx.isTerminal ? 0 : 'xs'}>
+          <Text dimColor bold>{chats.length ? 'Start a chat' : 'Start a chat with'}</Text>
+          {fresh.map(u => (
+            <Box key={`person-${u.id}`} flexDirection="row" gap={1} alignItems="center">
+              {ctx.hasSvg ? <Svg source={avatar(u, 34)} alt={u.name} width={34} height={34} /> : null}
+              <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+                <Button key={`start-${u.id}`} plain onPress={() => startChat($, u.id)}>
+                  <Text bold>{u.name}</Text>
+                  <Text dimColor>  {u.status === 'online' ? 'online' : 'away'}</Text>
+                </Button>
+                <Text dimColor wrap="truncate-end">{u.handle ?? ''}</Text>
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      ) : null}
       {chats.map(c => {
         const last = snap.messages[c.id]?.filter(m => m.kind !== 'system').at(-1)
         const n = c.unread?.[snap.me] ?? 0
@@ -455,6 +580,7 @@ function assistRow($: $, ctx: Ctx, snap: Snap, a: Assist, mine: boolean) {
           <Text dimColor={a.state !== 'ready'} italic={a.state !== 'ready'}>{a.state === 'ready' ? a.proposal?.label ?? a.line : a.line}{a.log.length ? (open ? ' ▾' : ' ▸') : ''}</Text>
         </Button>
       </Box>
+      {a.state === 'ready' && a.proposal ? preview(ctx, a.proposal.payload) : null}
       {a.state === 'ready' && a.proposal ? (
         <Box flexDirection="row" alignItems="center" gap={1}>
           {a.proposal.detail ? <Text dimColor>{a.proposal.detail}</Text> : null}
