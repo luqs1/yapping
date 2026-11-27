@@ -8,8 +8,8 @@
 
 import { createClerkClient, verifyToken } from '@clerk/backend'
 import type { Ctx } from './ctx'
-import { avatar, page } from './pages'
-import { type UserRow, endSession, publicDevice, publicUser, sessionUser, startSession, upsertUser } from './users'
+import { addToClaude, avatar, copyLine, page, platformOf } from './pages'
+import { type UserRow, contactSummaries, endSession, inviterByCode, publicDevice, publicUser, sessionUser, startSession, upsertUser } from './users'
 import { body, err, esc, json, redirect, safeNext, crossSite } from './util'
 
 // ---- helpers -------------------------------------------------------------
@@ -47,10 +47,11 @@ export function signinPage(ctx: Ctx, req: Request) {
   const next = safeNext(url.searchParams.get('next'))
   const leaving = url.searchParams.has('signedout')
   if (!leaving && sessionUser(ctx.db, req)) return redirect(next)
-  if (!ctx.cfg.clerk) return page('Sign in', `<h1>Sign-in isn't set up</h1><p>This server has no Clerk keys yet.</p>`, { status: 503 })
+  const invite = inviteHeader(ctx, next)
+  if (!ctx.cfg.clerk) return page('Sign in', `${invite}<h1>Sign-in isn't set up</h1><p>This server has no Clerk keys yet.</p>`, { status: 503 })
   return page('Sign in', `
-    <h1>Sign in to yapping</h1>
-    <p>Chat with the people you work with, right next to your AI.</p>
+    ${invite || `<h1>Sign in to yapping</h1>
+    <p>Chat with the people you work with, right next to your AI.</p>`}
     <div id="clerk" style="margin-top:28px;min-height:420px"></div>
     <p class="err" id="e"></p>
     ${clerkScripts(ctx)}`, {
@@ -72,6 +73,17 @@ export function signinPage(ctx: Ctx, req: Request) {
         Clerk.addListener(({ session }) => { if (session) enter() })
       })`,
   })
+}
+
+// Signing in on the way to an invite (/i/<code>): say who sent it. Only a
+// real, unexpired code says anything; any other code gets the plain page.
+function inviteHeader(ctx: Ctx, next: string) {
+  const code = next.match(/^\/i\/([A-Za-z0-9_-]{1,64})$/)?.[1]
+  const inviter = code ? inviterByCode(ctx.db, code) : null
+  if (!inviter) return ''
+  return `<div class="who">${avatar(inviter)}<div><b>${esc(inviter.name)}</b><div class="muted">sent you an invite</div></div></div>
+    <h1>${esc(inviter.name)} invited you to yapping</h1>
+    <p>yapping is team chat that sits right beside your AI. Sign in to connect with ${esc(inviter.name.split(' ')[0])}.</p>`
 }
 
 // POST /auth/clerk {token, next}: a Clerk session token in, our session out.
@@ -123,6 +135,14 @@ export function signout(ctx: Ctx, req: Request) {
 
 // ---- the account page ----------------------------------------------------
 
+// Where `yap open` points: the node's own page on the person's Mac, on the
+// node's default port (node/src/paths.ts DEFAULT_PORT). The server can't know
+// if it moved, so the page also says to run `yap open`.
+const NODE_PORT = 7790
+const LOCAL_PAGE = `http://127.0.0.1:${NODE_PORT}/`
+
+const shortDate = (t: number) => new Date(t).toUTCString().slice(5, 16)
+
 export function accountPage(ctx: Ctx, req: Request) {
   const user = sessionUser(ctx.db, req)
   if (!user) return signinRedirect(req)
@@ -130,22 +150,44 @@ export function accountPage(ctx: Ctx, req: Request) {
   const macs = devices.length
     ? devices.map((d) => `<div class="row"><div>${esc(d.name)}<div class="muted">${ctx.hub.isConnected(d.deviceId) ? 'Online now' : d.lastSeen ? `Last seen ${new Date(d.lastSeen).toUTCString().slice(5, 22)} UTC` : 'Never connected'}</div></div>
         <form method="post" action="/account/devices/${esc(d.deviceId)}/remove"><button class="link" type="submit">Remove</button></form></div>`).join('')
-    : `<p class="muted" style="margin:0 0 12px">No Macs yet.</p><a class="btn" href="/dl/yapping.mcpb" download>Add to Claude</a>`
+    : `<p class="muted" style="margin:0 0 12px">No Macs yet.</p>${addToClaude(ctx.cfg.origin)}`
+  // Everyone you're connected with, newest first: an inviter sees here that
+  // their invite was taken.
+  const people = contactSummaries(ctx.db, user.id)
+  const contacts = people.length
+    ? people.map((p) => {
+        const state = ctx.hub.online(p.id) ? 'Online now' : p.has_mac ? 'On yapping' : 'No Mac linked yet'
+        return `<div class="row contact"><div class="who" style="margin:0;min-width:0">${avatar(p)}<div style="min-width:0"><b>${esc(p.name)}</b><div class="muted" style="overflow-wrap:anywhere">${esc(p.email)}</div><div class="muted">${state}</div></div></div>
+          <div style="text-align:right;flex:none"><span class="pill">Joined</span><div class="muted">${esc(shortDate(p.connected_at))}</div></div></div>`
+      }).join('')
+    : `<p class="muted" style="margin:0">No contacts yet. Make an invite link below: when someone opens it and signs in, they show up here.</p>`
+  const open = devices.length
+    ? `<div class="mac-only" style="margin:0 0 28px">
+        <a class="btn" href="${LOCAL_PAGE}" target="_blank" rel="noopener">Open my chats</a>
+        <p class="muted" style="margin:8px 0 4px">Opens yapping on this Mac. Nothing? Run this in Terminal, or say “open my chats” in Claude.</p>
+        ${copyLine('yap open')}
+      </div>
+      <div class="not-mac card"><b>Your chats live on your Mac.</b><p class="muted" style="margin:4px 0 0">Open them there: say “open my chats” in Claude, or run <b>yap open</b> in Terminal.</p></div>`
+    : ''
   const manage = ctx.cfg.clerk
     ? `<h1 style="font-size:18px">Signing in</h1>
     <p>Your email, phone, passkeys and connected accounts.</p>
     <button type="button" class="secondary" id="manage">Manage how you sign in</button>${clerkScripts(ctx)}`
     : ''
   return page('Your account', `
+    <style>.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:#e8f5ec;color:#1d6b3a}</style>
     <div class="who">${avatar(user)}<div><b>${esc(user.name)}</b><div class="muted">${esc(user.email)}</div></div></div>
+    ${open}
     <h1 style="font-size:18px">Your Macs</h1>
     <div class="card">${macs}</div>
+    <h1 style="font-size:18px">Contacts</h1>
+    <div class="card">${contacts}</div>
     <h1 style="font-size:18px">Invite someone</h1>
     <p>Send them a link. When they open it, you'll be in each other's contacts.</p>
     <form method="post" action="/account/invite" style="margin-bottom:28px"><button type="submit" class="secondary">Make an invite link</button></form>
     ${manage}
     <form method="post" action="/signout" style="margin-top:40px"><button class="link" type="submit">Sign out</button></form>`,
-    ctx.cfg.clerk ? { script: `window.addEventListener('load', async () => { ${CLERK_LOAD}; document.getElementById('manage').onclick = () => Clerk.openUserProfile() })` } : {})
+    { platform: platformOf(req), ...(ctx.cfg.clerk ? { script: `window.addEventListener('load', async () => { ${CLERK_LOAD}; document.getElementById('manage').onclick = () => Clerk.openUserProfile() })` } : {}) })
 }
 
 export function removeDevice(ctx: Ctx, req: Request, deviceId: string) {

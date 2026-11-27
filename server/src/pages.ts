@@ -36,15 +36,38 @@ input:focus{outline:2px solid #111;outline-offset:1px;border-color:#111}
 .err{color:#b42318;font-size:14px;min-height:1px}
 pre{background:#f6f6f6;border-radius:10px;padding:12px 14px;font:13px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all}
 a{color:#111}
+.cmd{display:flex;align-items:center;gap:8px;margin:8px 0 4px;border:1px solid #e6e6e6;border-radius:10px;padding:8px 8px 8px 12px;background:#fafafa}
+.cmd code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
+.cmd .copy{width:auto;height:30px;padding:0 12px;font-size:13px;border-radius:8px;flex:none}
+.not-mac{display:none}
+html[data-platform=other] .mac-only{display:none}
+html[data-platform=other] .not-mac{display:block}
+@media (hover:none) and (pointer:coarse){.mac-only{display:none!important}.not-mac{display:block!important}}
 `
 
-export function page(title: string, content: string, opts: { script?: string; status?: number } = {}) {
+// Copy buttons ([data-copy]) work on every page.
+const COPY_JS = `document.addEventListener('click',e=>{const b=e.target.closest('[data-copy]');if(!b)return;navigator.clipboard?.writeText(b.dataset.copy).then(()=>{const t=b.textContent;b.textContent='Copied';setTimeout(()=>b.textContent=t,1500)}).catch(()=>{})})`
+
+// yapping runs on a Mac. Pages mark Mac-only things .mac-only and the
+// alternative .not-mac; the server picks from the user agent, and a CSS
+// media query catches touch devices that claim to be a Mac (iPadOS Safari).
+// No user agent (curl, crawlers): leave it to the CSS.
+export type Platform = 'mac' | 'other' | undefined
+export function platformOf(req: Request): Platform {
+  const ua = req.headers.get('user-agent') || ''
+  if (!ua) return undefined
+  if (/iPhone|iPad|iPod|Android|Mobile|CrOS|Windows|Linux/i.test(ua)) return 'other'
+  if (/Macintosh|Mac OS X/.test(ua)) return 'mac'
+  return undefined
+}
+
+export function page(title: string, content: string, opts: { script?: string; status?: number; platform?: Platform } = {}) {
   return html(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8">
+    `<!doctype html><html lang="en"${opts.platform ? ` data-platform="${opts.platform}"` : ''}><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
 <title>${esc(title)} · yapping</title><style>${CSS}</style></head>
-<body><main><div class="mark">yapping</div>${content}</main>${opts.script ? `<script>${opts.script}</script>` : ''}</body></html>`,
+<body><main><div class="mark"><a href="/" style="text-decoration:none">yapping</a></div>${content}</main><script>${COPY_JS}${opts.script ? `\n${opts.script}` : ''}</script></body></html>`,
     opts.status,
   )
 }
@@ -56,4 +79,28 @@ export function avatar(u: { name?: string; avatar?: string | null }) {
 
 export function message(title: string, text: string, status = 200) {
   return page(title, `<h1>${esc(title)}</h1><p>${esc(text)}</p>`, { status })
+}
+
+// A line of text to copy: a command, a URL.
+export function copyLine(text: string) {
+  return `<div class="cmd"><code>${esc(text)}</code><button type="button" class="copy secondary" data-copy="${esc(text)}" aria-label="Copy ${esc(text)}">Copy</button></div>`
+}
+
+// "Add to Claude": the Mac download, or, anywhere else, what to do instead.
+// The download is 60 MB of Mac app, so a phone never gets the link.
+export function addToClaude(origin: string, opts: { cls?: string } = {}) {
+  return `<div class="mac-only">
+    <a class="btn ${opts.cls ?? ''}" href="/dl/yapping.mcpb" download>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
+      Add to Claude
+    </a>
+    <p class="muted" style="margin:8px 0 0">For Claude on Mac. <a href="https://claude.ai/download">Don't have it yet?</a></p>
+  </div>
+  <div class="not-mac card" style="margin:0">
+    <b>yapping runs on your Mac.</b>
+    <p style="margin:4px 0 12px">Open this page on your Mac to add it to Claude.</p>
+    <button type="button" class="secondary" data-copy="${esc(origin)}">Copy this page's link</button>
+    <p class="muted" style="margin:16px 0 4px">Already set up on your Mac? In Claude on the web or your phone: Settings › Connectors › Add custom connector, and paste:</p>
+    ${copyLine(`${origin}/mcp`)}
+  </div>`
 }

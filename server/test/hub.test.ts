@@ -105,7 +105,10 @@ describe('gateway', () => {
       throw new Error('no such method')
     })
     expect(await s.ctx.hub.rpc(finn.user.id, 'inbox', {})).toEqual([{ chat: 'dm:x', unread: 2 }])
-    await expect(s.ctx.hub.rpc(finn.user.id, 'nope', {})).rejects.toThrow('no such method')
+    // Not `await expect(p).rejects.toThrow()`: on Bun 1.4 that closes the
+    // in-process WebSocket. Catch the error and look at it instead.
+    const e: any = await s.ctx.hub.rpc(finn.user.id, 'nope', {}).then(() => null, (x) => x)
+    expect(String(e?.message ?? e)).toContain('no such method')
     await node.close()
   })
 

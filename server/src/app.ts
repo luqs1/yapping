@@ -16,7 +16,7 @@ import * as device from './device'
 import * as dir from './directory'
 import * as oauth from './oauth'
 import { mcpHandler, mcpPreflight } from './mcp'
-import { message } from './pages'
+import { message, platformOf } from './pages'
 import { bearer, deviceByToken } from './users'
 import { HOUR, err, json, redirect } from './util'
 
@@ -38,7 +38,7 @@ export function startServer(env: Record<string, string | undefined> = process.en
     idleTimeout: 60,
     routes: {
       // Sign-in and the account page.
-      '/': r((c, req) => homePage(c.cfg.origin, !!sessionUser(c.db, req))),
+      '/': r((c, req) => homePage(c.cfg.origin, !!sessionUser(c.db, req), platformOf(req))),
       '/signin': { GET: r(auth.signinPage) },
       '/signout': { POST: r(auth.signout) },
       '/account': { GET: r(auth.accountPage) },
@@ -86,6 +86,7 @@ export function startServer(env: Record<string, string | undefined> = process.en
       // Static.
       '/healthz': () => json({ ok: true, version: '0.1.0' }),
       '/install.sh': () => file(join(cfg.publicDir, 'install.sh'), 'text/x-shellscript; charset=utf-8'),
+      '/static/*': (req) => staticFile(cfg, new URL(req.url).pathname.slice('/static/'.length)),
       '/privacy': () => privacyPage(),
       '/dl/*': (req) => download(cfg, new URL(req.url).pathname.slice('/dl/'.length)),
     },
@@ -123,13 +124,27 @@ function file(path: string, type: string) {
   return new Response(Bun.file(path), { headers: { 'content-type': type, 'cache-control': 'no-cache' } })
 }
 
+// A file under `root`, or null. No escaping that folder.
+function within(root: string, rel: string): string | null {
+  let name: string
+  try { name = decodeURIComponent(rel) } catch { return null }
+  const path = normalize(join(root, name))
+  return path.startsWith(root + sep) && existsSync(path) && statSync(path).isFile() ? path : null
+}
+
+// /static/<name>: the front page's pictures, from server/public/static/.
+const STATIC_TYPES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', svg: 'image/svg+xml', ico: 'image/x-icon' }
+function staticFile(cfg: Config, rel: string) {
+  const path = within(join(cfg.publicDir, 'static'), rel)
+  const type = path && STATIC_TYPES[path.split('.').pop()!.toLowerCase()]
+  if (!path || !type) return new Response('Not found', { status: 404 })
+  return new Response(Bun.file(path), { headers: { 'content-type': type, 'cache-control': 'public, max-age=3600', 'x-content-type-options': 'nosniff' } })
+}
+
 // /dl/<name>: the node binaries, from $YAP_DATA/dl/. No escaping that folder.
 function download(cfg: Config, rel: string) {
-  const root = join(cfg.dataDir, 'dl')
-  let name: string
-  try { name = decodeURIComponent(rel) } catch { return new Response('Not found', { status: 404 }) }
-  const path = normalize(join(root, name))
-  if (!path.startsWith(root + sep) || !existsSync(path) || !statSync(path).isFile()) return new Response('Not found', { status: 404 })
+  const path = within(join(cfg.dataDir, 'dl'), rel)
+  if (!path) return new Response('Not found', { status: 404 })
   return new Response(Bun.file(path), {
     headers: {
       'content-type': path.endsWith('.sh') ? 'text/x-shellscript' : path.endsWith('.json') ? 'application/json' : 'application/octet-stream',

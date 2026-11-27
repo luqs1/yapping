@@ -54,7 +54,17 @@ curl -s localhost:8787/healthz
 ```
 
 Node binaries go in `/var/lib/yapping/dl/` and are served at `/dl/<name>`.
-`public/install.sh` is served at `/install.sh`.
+`public/install.sh` is served at `/install.sh`. It is a byte-for-byte copy of
+the real installer, `node/install.sh`, so deploying `server/` alone ships it;
+`bun test` fails if the two drift. After changing `node/install.sh`:
+
+```sh
+cp ../node/install.sh public/install.sh
+```
+
+`public/static/` holds the front page's pictures, served at `/static/<name>`
+(`claude-desktop.jpg` is `mockups/shots/claude-desktop.jpg`; the `-960` one is
+the same, resized for phones with `sips -Z 960`).
 
 ## What's where
 
@@ -71,7 +81,8 @@ Node binaries go in `/var/lib/yapping/dl/` and are served at `/dl/<name>`.
 | `src/hub.ts` | `/ws/node`: presence, relay + mailbox, gateway RPC |
 | `src/oauth.ts` | OAuth 2.1 authorization server for chat hosts |
 | `src/mcp.ts` | `/mcp`: tools, the sidebar resource |
-| `src/pages.ts` | the HTML look |
+| `src/home.ts` | the front page |
+| `src/pages.ts` | the HTML look, and the Mac / not-a-Mac "Add to Claude" block |
 
 ## Wire details beyond `docs/protocol.md`
 

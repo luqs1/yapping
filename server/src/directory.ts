@@ -12,9 +12,9 @@
 
 import type { Ctx } from './ctx'
 import { signinRedirect } from './auth'
-import { avatar, message, page } from './pages'
+import { addToClaude, avatar, message, page, platformOf } from './pages'
 import {
-  type DeviceRow, type UserRow, apiCaller, connect, getUser, isContact, publicDevice, publicUser, sessionUser,
+  type DeviceRow, type UserRow, apiCaller, connect, getUser, inviterByCode, isContact, publicDevice, publicUser, sessionUser,
 } from './users'
 import { DAY, body, err, esc, id, json, now, crossSite } from './util'
 
@@ -112,13 +112,9 @@ function makeInvite(ctx: Ctx, inviterId: string) {
   return { code, url: `${ctx.cfg.origin}/i/${code}` }
 }
 
-const inviteRow = (ctx: Ctx, code: string) =>
-  ctx.db.query<{ code: string; inviter_id: string }, [string, number]>('SELECT code, inviter_id FROM invites WHERE code = ? AND expires_at > ?').get(code, now())
-
 // Accept: one link can be used by several people until it expires.
 function accept(ctx: Ctx, user: UserRow, code: string): { inviter?: UserRow; problem?: string } {
-  const inv = inviteRow(ctx, code)
-  const inviter = inv && getUser(ctx.db, inv.inviter_id)
+  const inviter = inviterByCode(ctx.db, code)
   if (!inviter) return { problem: 'expired' }
   if (inviter.id === user.id) return { inviter, problem: 'self' }
   if (connect(ctx.db, inviter.id, user.id)) ctx.hub.contactAdded(inviter.id, user.id)
@@ -142,8 +138,7 @@ export function acceptInvite(ctx: Ctx, req: Request, code: string) {
 
 // The page behind an invite link.
 export function invitePage(ctx: Ctx, req: Request, code: string) {
-  const inv = inviteRow(ctx, code)
-  const inviter = inv && getUser(ctx.db, inv.inviter_id)
+  const inviter = inviterByCode(ctx.db, code)
   if (!inviter) return message('This invite has expired', 'Ask whoever sent it for a new link.', 404)
   const user = sessionUser(ctx.db, req)
   if (!user) return signinRedirect(req)
@@ -170,8 +165,8 @@ export function invitePagePost(ctx: Ctx, req: Request, code: string) {
     <h1>You and ${esc(r.inviter!.name)} are connected</h1>
     ${linked
       ? `<p>${esc(r.inviter!.name.split(' ')[0])} is in your yapping contacts now.</p>`
-      : `<p>One more step: add yapping to Claude on your Mac.</p><a class="btn" href="/dl/yapping.mcpb" download>Add to Claude</a>`}
-    <a class="btn secondary" href="/account" style="margin-top:24px">Your account</a>`)
+      : `<p>One more step: add yapping to Claude on your Mac.</p>${addToClaude(ctx.cfg.origin)}`}
+    <a class="btn secondary" href="/account" style="margin-top:24px">Your account</a>`, { platform: platformOf(req) })
 }
 
 // The account page's "Make an invite link" button.

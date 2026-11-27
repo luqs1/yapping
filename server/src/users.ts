@@ -122,3 +122,18 @@ export function connect(db: DB, a: string, b: string): boolean {
   db.transaction(() => { ins.run(a, b, now()); ins.run(b, a, now()) })()
   return fresh
 }
+
+// Who made an invite, if the code is real and still good.
+export function inviterByCode(db: DB, code: string): UserRow | null {
+  const inv = db.query<{ inviter_id: string }, [string, number]>('SELECT inviter_id FROM invites WHERE code = ? AND expires_at > ?').get(code, now())
+  return (inv && getUser(db, inv.inviter_id)) || null
+}
+
+// The account page's list: everyone you're connected with, newest first,
+// with when you connected and whether they've linked a Mac yet.
+export type ContactSummary = UserRow & { connected_at: number; has_mac: number }
+export const contactSummaries = (db: DB, owner: string) =>
+  db.query<ContactSummary, [string]>(
+    `SELECT u.*, c.created_at AS connected_at, EXISTS (SELECT 1 FROM devices d WHERE d.user_id = u.id) AS has_mac
+     FROM contacts c JOIN users u ON u.id = c.contact_id WHERE c.owner_id = ? ORDER BY c.created_at DESC, u.name`,
+  ).all(owner)
