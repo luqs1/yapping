@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# lab: drive the two yaplab desktops (run on the VM, as root; installed at
+# /srv/yaplab/bin/lab and /usr/local/bin/lab by setup.sh).
+#
+#   lab shot <who> [out.png]        full-display screenshot (default /srv/yaplab/shots/<who>-<time>.png); prints the path
+#   lab click <who> X Y             left click
+#   lab dclick <who> X Y            double click
+#   lab rclick <who> X Y            right click
+#   lab move <who> X Y              move the pointer (hover)
+#   lab type <who> "text"           type text into the focused window
+#   lab key <who> <combo>...        xdotool keysyms, e.g. Return, ctrl+l, ctrl+shift+t
+#   lab scroll <who> X Y up|down N  wheel N notches at X,Y
+#   lab open <who> <cmd...>         launch an app on that display as that user (transient unit)
+#   lab windows <who>               wmctrl -lGx
+#   lab focus <who> <name>          raise + focus the first window whose title/class matches
+#   lab tmux <who> capture [N]      exact text of the Claude terminal (last N lines of scrollback, default the screen)
+#   lab tmux <who> send <keys...>   tmux send-keys into it (e.g. lab tmux alice send "hello" Enter)
+#   lab rpc <who> <method> [json]   call that person's node local API
+#   lab status                      units, ports, displays
+#   lab restart [server|nodes|apps|all]
+#
+# <who>: alice | bob (or yapa | yapb, a | b).
+
+set -euo pipefail
+LAB=/srv/yaplab
+
+usage() { sed -n '2,24p' "$0"; exit "${1:-0}"; }
+
+user_of() {
+  case "${1:-}" in
+    alice|a|yapa|Alice) echo yapa ;;
+    bob|b|yapb|Bob) echo yapb ;;
+    *) echo "who? alice or bob (got '${1:-}')" >&2; exit 2 ;;
+  esac
+}
+
+# Load a person's env (DISPLAY, XAUTHORITY, YAP_PORT, …).
+load() {
+  U=$(user_of "$1")
+  set -a; . "$LAB/etc/$U.env"; set +a
+  WHO=$LAB_WHO
+}
+
+x() { DISPLAY=$DISPLAY XAUTHORITY=$XAUTHORITY "$@"; }
+
+cmd=${1:-}; [ -n "$cmd" ] || usage 1; shift
+
+case "$cmd" in
+  -h|--help|help) usage ;;
+
+  wait-x) # used by the units: wait for the display to accept clients
+    load "$1"
+    for _ in $(seq 1 100); do x xdpyinfo >/dev/null 2>&1 && exit 0; sleep 0.1; done
+    echo "display $DISPLAY not up" >&2; exit 1 ;;
+
+  shot)
+    load "$1"
+    out=${2:-$LAB/shots/$WHO-$(date +%Y%m%d-%H%M%S).png}
+    mkdir -p "$(dirname "$out")"
+    x scrot --overwrite "$out" >/dev/null
+    chmod 644 "$out"
+    echo "$out" ;;
+
+  click|dclick|rclick|move)
+    load "$1"; X=$2; Y=$3
+    case "$cmd" in
+      click) x xdotool mousemove --sync "$X" "$Y" click 1 ;;
+      dclick) x xdotool mousemove --sync "$X" "$Y" click --repeat 2 --delay 80 1 ;;
+      rclick) x xdotool mousemove --sync "$X" "$Y" click 3 ;;
+      move) x xdotool mousemove --sync "$X" "$Y" ;;
+    esac ;;
+
+  type)
+    load "$1"; shift
+    x xdotool type --delay 15 -- "$*" ;;
+
+  key)
+    load "$1"; shift
+    x xdotool key --delay 40 -- "$@" ;;
+
+  scroll)
+    load "$1"; X=$2; Y=$3; dir=$4; n=${5:-3}
+    case "$dir" in up) b=4 ;; down) b=5 ;; left) b=6 ;; right) b=7 ;; *) echo "up|down|left|right" >&2; exit 2 ;; esac
+    x xdotool mousemove --sync "$X" "$Y" click --repeat "$n" --delay 30 "$b" ;;
+
+  open)
+    load "$1"; shift
+    [ $# -gt 0 ] || { echo "lab open <who> <cmd...>" >&2; exit 2; }
+    systemd-run --quiet --collect --uid="$U" --gid="$U" -p EnvironmentFile="$LAB/etc/$U.env" \
+      --working-directory="/home/$U" --unit="yaplab-open-$U-$(date +%s%N | tail -c 8)" -- "$@"
+    echo "opened on $DISPLAY as $U: $*" ;;
+
+  windows)
+    load "$1"
+    x wmctrl -lGx ;;
+
+  focus)
+    load "$1"
+    x wmctrl -a "$2" ;;
+
+  tmux)
+    load "$1"; sub=${2:-capture}; shift 2 || true
+    t() { sudo -u "$U" tmux "$@"; }
+    case "$sub" in
+      capture) if [ -n "${1:-}" ]; then t capture-pane -p -J -t claude -S "-$1"; else t capture-pane -p -J -t claude; fi ;;
+      send) t send-keys -t claude "$@" ;;
+      *) echo "lab tmux <who> capture [N] | send <keys...>" >&2; exit 2 ;;
+    esac ;;
+
+  rpc)
+    load "$1"; method=$2; params=${3:-'{}'}
+    tok=$(cat "$YAP_HOME/local-token")
+    curl -fsS "http://127.0.0.1:$YAP_PORT/rpc" -H 'content-type: application/json' -H "x-yap-token: $tok" \
+      -d "{\"method\":\"$method\",\"params\":$params}"
+    echo ;;
+
+  status)
+    echo "server: $(systemctl is-active yaplab-server) http://127.0.0.1:18787"
+    for U in yapa yapb; do
+      set -a; . "$LAB/etc/$U.env"; set +a
+      line="$LAB_WHO ($U) display $DISPLAY vnc 127.0.0.1:$VNC_PORT node 127.0.0.1:$YAP_PORT"
+      st=""
+      for u in node xvfb wm vnc term browser; do st+=" $u=$(systemctl is-active yaplab-$u@$U)"; done
+      h=$(curl -fsS "http://127.0.0.1:$YAP_PORT/health" 2>/dev/null || echo '{}')
+      echo "$line"; echo "  $st"; echo "  health $h"
+    done
+    echo "production yapping.service MainPID=$(systemctl show -p MainPID --value yapping.service 2>/dev/null)" ;;
+
+  restart)
+    what=${1:-all}
+    case "$what" in
+      server) systemctl restart yaplab-server ;;
+      nodes) systemctl restart yaplab-node@yapa yaplab-node@yapb ;;
+      apps) systemctl restart yaplab-term@yapa yaplab-term@yapb yaplab-browser@yapa yaplab-browser@yapb ;;
+      all) systemctl restart yaplab-server; sleep 1
+           systemctl restart yaplab-node@yapa yaplab-node@yapb yaplab-xvfb@yapa yaplab-xvfb@yapb
+           sleep 1
+           for U in yapa yapb; do systemctl start yaplab-wm@$U yaplab-vnc@$U yaplab-term@$U yaplab-browser@$U; done ;;
+      *) echo "server|nodes|apps|all" >&2; exit 2 ;;
+    esac ;;
+
+  *) echo "unknown command $cmd" >&2; usage 2 ;;
+esac
