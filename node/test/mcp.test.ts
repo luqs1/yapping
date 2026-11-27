@@ -23,7 +23,7 @@ const ALICE = { id: 'u_alice', name: 'Alice' }
 const BOB = { id: 'u_bob', name: 'Bob' }
 const CAROL = { id: 'u_carol', name: 'Carol' }
 const CLI = join(import.meta.dir, '..', 'src', 'cli.ts')
-const APP_ONLY = ['yap_sync', 'yap_approve', 'yap_dismiss', 'yap_set_sees', 'yap_react', 'yap_mark_read', 'yap_bridge']
+const APP_ONLY = ['yap_sync', 'yap_approve', 'yap_dismiss', 'yap_set_sees', 'yap_react', 'yap_mark_read', 'yap_bridge', 'yap_send_own', 'yap_create_chat', 'yap_contacts', 'yap_invite']
 const MODEL = ['yap_inbox', 'yap_read', 'yap_send', 'yap_propose', 'yap_sign_in']
 
 let fake: FakeServer

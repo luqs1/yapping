@@ -165,6 +165,9 @@ describe('the UI shapes (shared/sim.js)', () => {
     await alice.rpc('react', { chat: chatId, msgId: incoming.id, emoji: '😂' })
     await until(async () => lastMsg(await bob.rpc('state'), chatId).reactions['😂'], 'reaction')
     await bob.rpc('set_sees', { chat: chatId, on: true })
+    // Alice is told that Bob's AI can now read along.
+    const bobId = (await bob.rpc('state')).me
+    await until(async () => (await alice.rpc('state')).chats.find((c: any) => c.id === chatId)?.sees?.[bobId], "bob's sees to reach alice")
     await bob.rpc('read', { chat: chatId })
     await bob.rpc('propose', { chat: chatId, label: 'Send Alice the map?', action: 'Send', payload: { kind: 'link', title: 'Barbican map', url: 'https://example.com/map' } })
     await Bun.sleep(150) // the reading glance settles
@@ -195,6 +198,8 @@ describe('agents and sees', () => {
     await alice.rpc('set_sees', { chat: chatId, on: false })
     await expect(alice.rpc('read', { chat: chatId })).rejects.toMatchObject({ code: 'sees_off' })
     await expect(alice.rpc('propose', { chat: chatId, label: 'x', action: 'Send', payload: { kind: 'text', text: 'x' } })).rejects.toMatchObject({ code: 'sees_off' })
+    // An agent can't send into a hidden chat either; the owner still can.
+    await expect(alice.rpc('send', { chat: chatId, text: 'from an agent', agent: true })).rejects.toMatchObject({ code: 'sees_off' })
     // The inbox admits the chat exists, and nothing more.
     const inbox = await alice.rpc('inbox')
     const row = inbox.chats.find((c: any) => c.chat === chatId)

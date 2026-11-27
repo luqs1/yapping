@@ -13,7 +13,8 @@
 //   model-visible  yap_inbox, yap_read, yap_send (exact words), yap_propose,
 //                  yap_sign_in (local only: the link to link this Mac)
 //   app-only       yap_sync, yap_approve, yap_dismiss, yap_set_sees,
-//                  yap_react, yap_mark_read, yap_bridge
+//                  yap_react, yap_mark_read, yap_bridge, yap_send_own,
+//                  yap_create_chat, yap_contacts, yap_invite
 //   resource       ui://yapping/sidebar (text/html;profile=mcp-app)
 //
 //   claude mcp add yapping -- yap mcp      (Claude Code; Codex likewise)
@@ -119,8 +120,8 @@ export function createMcpServer(o: { call: Call; home: string; origin: string; h
       replyTo: z.string().optional().describe('Message id this replies to'),
     }),
     annotations: { title: 'Send message', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
-    _meta: { ui: { visibility: ['model', 'app'] } },
-  }, tool('send', true))
+    _meta: { ui: { visibility: ['model'] } },
+  }, async (args: Record<string, unknown> = {}) => tool('send', true)({ ...args, agent: true }))
 
   server.registerTool('yap_propose', {
     title: 'Suggest something in yapping',
@@ -183,6 +184,13 @@ export function createMcpServer(o: { call: Call; home: string; origin: string; h
   app('yap_bridge', 'bridge', 'Link or unlink WhatsApp or Slack', z.object({
     op: z.enum(['status', 'link', 'unlink']), network: z.enum(['whatsapp', 'slack']).optional(),
   }), { destructive: true, openWorld: true })
+
+  // The person's own sends and contacts, from the sidebar only. The model's
+  // yap_send is marked as an agent's, so the node holds it to "sees".
+  app('yap_send_own', 'send', 'Send your own message', z.object({ chat: z.string(), text: z.string().min(1).max(10_000), replyTo: z.string().optional() }), { destructive: true, openWorld: true })
+  app('yap_create_chat', 'create_chat', 'Start a chat', z.object({ members: z.array(z.string()).min(1), title: z.string().optional() }), {})
+  app('yap_contacts', 'contacts', 'List the people you can message', z.object({}), { idempotent: true })
+  app('yap_invite', 'invite', 'Make an invite link', z.object({}), {})
 
   // ---- the sidebar resource -----------------------------------------------
 

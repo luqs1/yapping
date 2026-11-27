@@ -11,7 +11,8 @@
 //                  sends exactly the words given), yap_propose (a suggestion
 //                  that waits for the owner's approval)
 //   app-only       yap_sync, yap_approve, yap_dismiss, yap_set_sees, yap_react,
-//                  yap_mark_read, yap_bridge — only the sidebar may call them,
+//                  yap_mark_read, yap_bridge, yap_send_own, yap_create_chat,
+//                  yap_contacts, yap_invite — only the sidebar may call them,
 //                  so the model can never approve its own proposal or widen
 //                  what it can see.
 // One UI resource, ui://yapping/sidebar, is the sidebar bundle
@@ -124,8 +125,8 @@ function buildServer(ctx: Ctx, auth: AuthInfo | undefined) {
       replyTo: z.string().optional().describe('Message id this replies to'),
     }),
     annotations: { title: 'Send message', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
-    _meta: { ui: { visibility: ['model', 'app'] } },
-  }, gateway('send', true))
+    _meta: { ui: { visibility: ['model'] } },
+  }, async (args: Record<string, unknown> = {}) => gateway('send', true)({ ...args, agent: true }))
 
   server.registerTool('yap_propose', {
     title: 'Suggest something in yapping',
@@ -172,6 +173,13 @@ function buildServer(ctx: Ctx, auth: AuthInfo | undefined) {
   app('yap_bridge', 'bridge', 'Link or unlink WhatsApp or Slack', z.object({
     op: z.enum(['status', 'link', 'unlink']), network: z.enum(['whatsapp', 'slack']).optional(),
   }), { destructive: true, openWorld: true })
+
+  // The person's own sends and contacts, from the sidebar only. The model's
+  // yap_send is marked as an agent's, so the node holds it to "sees".
+  app('yap_send_own', 'send', 'Send your own message', z.object({ chat: z.string(), text: z.string().min(1).max(10_000), replyTo: z.string().optional() }), { destructive: true, openWorld: true })
+  app('yap_create_chat', 'create_chat', 'Start a chat', z.object({ members: z.array(z.string()).min(1), title: z.string().optional() }), {})
+  app('yap_contacts', 'contacts', 'List the people you can message', z.object({}), { idempotent: true })
+  app('yap_invite', 'invite', 'Make an invite link', z.object({}), {})
 
   // ---- the sidebar resource -----------------------------------------------
 

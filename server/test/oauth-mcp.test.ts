@@ -238,12 +238,12 @@ describe('mcp', () => {
   test('tools/list: annotations, app-only visibility, ChatGPT entrypoints', async () => {
     const { result } = await mcp('tools/list')
     const t = Object.fromEntries(result.tools.map((x: any) => [x.name, x]))
-    expect(Object.keys(t).sort()).toEqual(['yap_approve', 'yap_bridge', 'yap_dismiss', 'yap_inbox', 'yap_mark_read', 'yap_propose', 'yap_react', 'yap_read', 'yap_send', 'yap_set_sees', 'yap_sync'])
+    expect(Object.keys(t).sort()).toEqual(['yap_approve', 'yap_bridge', 'yap_contacts', 'yap_create_chat', 'yap_dismiss', 'yap_inbox', 'yap_invite', 'yap_mark_read', 'yap_propose', 'yap_react', 'yap_read', 'yap_send', 'yap_send_own', 'yap_set_sees', 'yap_sync'])
     expect(t.yap_inbox.annotations.readOnlyHint).toBe(true)
     expect(t.yap_read.annotations.readOnlyHint).toBe(true)
     expect(t.yap_send.annotations.destructiveHint).toBe(true)
-    expect(t.yap_send._meta.ui.visibility).toEqual(['model', 'app'])
-    for (const name of ['yap_sync', 'yap_approve', 'yap_dismiss', 'yap_set_sees', 'yap_react', 'yap_mark_read', 'yap_bridge'])
+    expect(t.yap_send._meta.ui.visibility).toEqual(['model'])
+    for (const name of ['yap_sync', 'yap_approve', 'yap_dismiss', 'yap_set_sees', 'yap_react', 'yap_mark_read', 'yap_bridge', 'yap_send_own', 'yap_create_chat', 'yap_contacts', 'yap_invite'])
       expect(t[name]._meta.ui.visibility).toEqual(['app'])
     expect(t.yap_inbox._meta.ui.resourceUri).toBe('ui://yapping/sidebar')
     expect(t.yap_inbox._meta['ui/resourceUri']).toBe('ui://yapping/sidebar')
@@ -270,8 +270,14 @@ describe('mcp', () => {
 
     const sent = await mcp('tools/call', { name: 'yap_send', arguments: { chat: 'dm:alice:bob', text: 'on my way' } })
     expect(sent.result.structuredContent).toEqual({ ok: true, id: 'm1' })
-    expect(calls.at(-1).params).toEqual({ chat: 'dm:alice:bob', text: 'on my way', harness: 'claude' })
+    // The model's send is marked as an agent's: the node holds it to "sees".
+    expect(calls.at(-1).params).toEqual({ chat: 'dm:alice:bob', text: 'on my way', harness: 'claude', agent: true })
     expect(calls.at(-1).via).toEqual({ client: 'Claude', harness: 'claude' })
+
+    // The sidebar's composer sends the person's own words, unmarked.
+    await mcp('tools/call', { name: 'yap_send_own', arguments: { chat: 'dm:alice:bob', text: 'typed by me' } })
+    expect(calls.at(-1)).toMatchObject({ t: 'rpc', method: 'send', params: { chat: 'dm:alice:bob', text: 'typed by me' } })
+    expect(calls.at(-1).params.agent).toBeUndefined()
   })
 
   test('yap_sync: since 0 is the full state, otherwise events', async () => {
@@ -285,7 +291,7 @@ describe('mcp', () => {
     const client = new Client({ name: 'test', version: '1' })
     await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`), { requestInit: { headers: { authorization: `Bearer ${token}` } } }))
     const tools = await client.listTools()
-    expect(tools.tools.length).toBe(11)
+    expect(tools.tools.length).toBe(15)
     const r: any = await client.callTool({ name: 'yap_inbox', arguments: {} })
     expect(r.structuredContent.items[0].title).toBe('Bob')
     await client.close()

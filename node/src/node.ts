@@ -6,7 +6,7 @@
 // stamped with a `seq`, so a sidebar folds them in with sim.js's applyEvent.
 //
 // Messages travel as *wire events* (docs/protocol.md):
-//   {v:0, kind:'message'|'reaction'|'read'|'typing', chat:{id,kind,members,title?},
+//   {v:0, kind:'message'|'reaction'|'read'|'typing'|'sees', chat:{id,kind,members,title?},
 //    id, from, ts, text?, attachment?, emoji?, msgId?, assistedBy?, sig}
 // signed with this device's Ed25519 key and boxed separately to every device
 // of every member, our own other devices included, so they stay in step.
@@ -37,7 +37,7 @@ export class RpcError extends Error {
 
 export type WireEvent = {
   v: 0
-  kind: 'message' | 'reaction' | 'read' | 'typing'
+  kind: 'message' | 'reaction' | 'read' | 'typing' | 'sees'
   chat: { id: string; kind: 'dm' | 'group'; members: string[]; title?: string }
   id: string
   from: string
@@ -46,6 +46,7 @@ export type WireEvent = {
   attachment?: Json
   emoji?: string
   off?: boolean // reaction removed (our addition: makes reactions idempotent)
+  on?: boolean // 'sees': whether the sender's agent may now see this chat
   msgId?: string
   replyTo?: string // (our addition: threads replies)
   assistedBy?: string
@@ -338,6 +339,15 @@ export async function startNode(opts: NodeOpts) {
           chat.unread = { ...chat.unread, [myId]: 0 }
           saveChat(chat)
         }
+        return true
+      }
+      case 'sees': {
+        // Someone in the chat let their agent see it, or stopped: everyone
+        // in it should know whose AI can read along.
+        if (!chat.members.includes(ev.from)) return false
+        if (!!chat.sees?.[ev.from] === !!ev.on) return true
+        chat.sees = { ...chat.sees, [ev.from]: !!ev.on }
+        saveChat(chat)
         return true
       }
       case 'typing': {
@@ -762,9 +772,12 @@ export async function startNode(opts: NodeOpts) {
       }
     },
 
-    // The owner's own words, over our network or the chat's bridge.
+    // The owner's own words, over our network or the chat's bridge. A call an
+    // agent makes (`agent: true`) is held to the same "sees" rule as read:
+    // it can't send into a chat hidden from it.
     async send(p) {
       const chat = resolveChat(p.chat, true)
+      if (p.agent === true && !chat.sees?.[needMe()]) throw new RpcError('sees_off', `You can't see "${chat.title}", so you can't send there. Its owner can switch it on in the yapping sidebar.`)
       const text = String(p.text ?? '').slice(0, 4000)
       if (!text.trim()) throw new RpcError('bad_request', 'Nothing to send.')
       if (chat.transport !== 'yap') {
@@ -820,16 +833,19 @@ export async function startNode(opts: NodeOpts) {
     dismiss(p) {
       const a = store.assist(String(p.id ?? p.assistId ?? ''))
       if (!a || a.owner !== needMe()) throw new RpcError('no_assist', 'No such proposal.')
-      putAssist({ ...a, state: 'dismissed', line: 'Left it', proposal: undefined })
+      putAssist({ ...a, state: 'dismissed', line: 'You chose Not now', proposal: undefined })
       return { ok: true }
     },
 
-    // Whether this person's agent may see a chat. Private to this person.
+    // Whether this person's agent may see a chat. The others in a yapping
+    // chat are told, so nobody's AI reads along unannounced; a bridged chat's
+    // network has no way to carry it.
     set_sees(p) {
       const myId = needMe()
       const chat = resolveChat(p.chat)
       chat.sees = { ...chat.sees, [myId]: !!p.on }
       saveChat(chat)
+      if (chat.transport === 'yap') enqueue({ v: 0, kind: 'sees', chat: chatRef(chat), id: randomUUID(), from: myId, ts: Date.now(), on: !!p.on })
       return { ok: true, sees: !!p.on }
     },
 
